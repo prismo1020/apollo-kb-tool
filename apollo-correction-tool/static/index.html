@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Apollo Correction Console</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="rail">
+        <div class="brand">
+          <div>
+            <div class="wordmark">SANDBOX VR</div>
+            <div class="product-name">Apollo KB</div>
+          </div>
+        </div>
+
+        <nav class="nav-list" aria-label="Main">
+          <button class="nav-item active" type="button">Correction</button>
+          <button class="nav-item" type="button" id="refreshStatus">Refresh</button>
+        </nav>
+
+        <div class="status-block">
+          <span class="label">KB files</span>
+          <strong id="fileCount">-</strong>
+          <span class="muted" id="kbRoot">Loading folder...</span>
+        </div>
+      </aside>
+
+      <main class="workspace">
+        <header class="topbar">
+          <div>
+            <h1>Apollo Correction Console</h1>
+          </div>
+          <div class="top-actions">
+            <div class="sandbox-logo" aria-label="Sandbox VR">
+              <img id="sandboxLogo" src="/sandbox-logo-black.png" alt="Sandbox VR" onerror="this.classList.add('missing')" />
+              <span>SANDBOX VR</span>
+            </div>
+            <span class="sync-pill" id="syncState">Indexing</span>
+          </div>
+        </header>
+
+        <section class="layout-grid">
+          <form class="panel correction-panel" id="correctionForm">
+            <div class="section-title">
+              <h2>Correction Intake</h2>
+              <span class="rule"></span>
+            </div>
+
+            <label class="field">
+              <span>User question</span>
+              <textarea id="question" name="question" rows="4" placeholder="Paste the question that exposed the bad answer."></textarea>
+            </label>
+
+            <label class="field">
+              <span>Apollo's wrong answer</span>
+              <textarea id="wrong_answer" name="wrong_answer" rows="5" placeholder="Paste the answer Apollo gave."></textarea>
+            </label>
+
+            <label class="field">
+              <span>Approved answer or guidance</span>
+              <textarea id="correct_answer" name="correct_answer" rows="5" placeholder="Optional, but best when known."></textarea>
+            </label>
+
+            <div class="field-row">
+              <label class="field">
+                <span>Category</span>
+                <select id="category" name="category">
+                  <option value="">Auto-detect</option>
+                  <option>TECH</option>
+                  <option>OPERATIONS</option>
+                  <option>POLICY</option>
+                  <option>EXPERIENCES</option>
+                  <option>SYSTEMS</option>
+                  <option>ADMIN</option>
+                  <option>STAFF</option>
+                  <option>GUEST</option>
+                  <option>VISUAL</option>
+                  <option>OPS_FLOW</option>
+                  <option>CORRECTION</option>
+                </select>
+              </label>
+
+              <label class="field">
+                <span>Reviewer</span>
+                <input id="submitter" name="submitter" type="text" placeholder="Name or initials" />
+              </label>
+            </div>
+
+            <label class="field">
+              <span>Reviewer notes</span>
+              <textarea id="notes" name="notes" rows="3" placeholder="Optional context for future reviewers."></textarea>
+            </label>
+
+            <div class="button-row">
+              <button class="button primary" type="submit">Analyze Single</button>
+              <button class="button secondary" id="addToBatch" type="button">Add to Batch</button>
+              <button class="button quiet" id="clearForm" type="button">Clear</button>
+            </div>
+
+            <div class="batch-workbench">
+              <div class="batch-head">
+                <h3>Batch Queue</h3>
+                <span id="batchCount">0 pending</span>
+              </div>
+              <div class="batch-list" id="batchList"></div>
+              <div class="button-row">
+                <button class="button primary" id="analyzeBatch" type="button">Analyze Batch</button>
+                <button class="button quiet" id="clearBatch" type="button">Clear Batch</button>
+              </div>
+            </div>
+          </form>
+
+          <section class="panel review-panel">
+            <div class="section-title">
+              <h2>Approval Review</h2>
+              <span class="rule"></span>
+            </div>
+
+            <div class="empty-state" id="emptyState">
+              <strong>No correction loaded</strong>
+              <span>Submit an intake to see the recommended KB target.</span>
+            </div>
+
+            <div class="review-content hidden" id="reviewContent">
+              <div class="batch-review hidden" id="batchReview">
+                <div class="batch-head">
+                  <h3>Batch Review</h3>
+                  <span id="batchReviewCount">0 analyzed</span>
+                </div>
+                <div class="batch-review-list" id="batchReviewList"></div>
+              </div>
+
+              <div class="decision-strip">
+                <button class="decision active" id="modeExisting" type="button">Update file</button>
+                <button class="decision" id="modeNew" type="button">New file</button>
+              </div>
+
+              <div id="matchList" class="match-list"></div>
+              <div class="section-summary hidden" id="sectionSummary"></div>
+
+              <div class="new-file-fields hidden" id="newFileFields">
+                <label class="field">
+                  <span>New file topic</span>
+                  <input id="new_topic" type="text" placeholder="Example: Refrigerator facility R&M policy" />
+                </label>
+                <label class="field">
+                  <span>Purpose</span>
+                  <textarea id="new_purpose" rows="3" placeholder="Short purpose for the new KB file."></textarea>
+                </label>
+              </div>
+
+              <div class="diff-grid">
+                <label class="field">
+                  <span>Current KB section</span>
+                  <textarea id="currentSection" rows="13" readonly></textarea>
+                </label>
+
+                <label class="field">
+                  <span>Proposed replacement section</span>
+                  <textarea id="replacementPreview" rows="13"></textarea>
+                </label>
+              </div>
+
+              <button class="button primary wide" id="openConfirm" type="button">Approve and Update KB</button>
+            </div>
+          </section>
+        </section>
+
+        <section class="activity-band">
+          <div class="section-title compact">
+            <h2>Recent Updates</h2>
+            <span class="rule"></span>
+          </div>
+          <div id="recentList" class="recent-list"></div>
+        </section>
+      </main>
+    </div>
+
+    <div class="confirm-layer hidden" id="confirmLayer" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
+      <div class="confirm-bubble">
+        <p class="kicker">Confirmation</p>
+        <h2 id="confirmTitle">Update the Apollo KB?</h2>
+        <p id="confirmText" class="confirm-copy"></p>
+        <label class="checkline">
+          <input id="reviewedCheck" type="checkbox" />
+          <span>I reviewed the target file and drafted guidance.</span>
+        </label>
+        <div class="button-row end">
+          <button class="button quiet" id="cancelConfirm" type="button">Cancel</button>
+          <button class="button primary" id="confirmApprove" type="button" disabled>Update Knowledge Base</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="toast hidden" id="toast"></div>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

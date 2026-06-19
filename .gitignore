@@ -1,0 +1,7 @@
+brand-preview/
+_apollo_backups/
+apollo-correction-tool/__pycache__/
+apollo-correction-tool/*.pyc
+apollo-correction-tool/server.*.log
+apollo-correction-tool/server.pid
+apollo-correction-tool/data/
