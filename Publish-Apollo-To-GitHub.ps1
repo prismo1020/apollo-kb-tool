@@ -96,12 +96,30 @@ if ($LASTEXITCODE -eq 0) {
 
 if ($HasStagedChanges) {
     git commit -m "Publish Apollo KB correction tool"
+    if ($LASTEXITCODE -ne 0) {
+        throw "Git could not create the local publish commit."
+    }
 }
 else {
     Write-Host "No local file changes to commit." -ForegroundColor Yellow
 }
 
+Write-Host ""
+Write-Host "Syncing with the starter GitHub commit..." -ForegroundColor Cyan
+git fetch origin main
+if ($LASTEXITCODE -ne 0) {
+    throw "Could not fetch the current GitHub main branch."
+}
+
+git merge origin/main --allow-unrelated-histories --no-edit
+if ($LASTEXITCODE -ne 0) {
+    throw "Could not merge the starter GitHub commit. If Git reports a conflict, open the files it names, keep the Apollo content, then run this again."
+}
+
 git push -u origin main
+if ($LASTEXITCODE -ne 0) {
+    throw "GitHub rejected the push. The files were committed locally, but they were not published online."
+}
 
 Write-Host ""
 Write-Host "Published to GitHub:" -ForegroundColor Green
