@@ -87,6 +87,15 @@ function isReviewer() {
   return ["reviewer", "admin"].includes(state.profile?.role);
 }
 
+function requireSignedIn() {
+  if (state.user) return true;
+  els.authPanel.classList.remove("hidden");
+  els.authPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+  setSync("Sign in");
+  showToast("Sign in with email before submitting corrections.");
+  return false;
+}
+
 function formPayload() {
   return {
     question: els.question.value.trim(),
@@ -135,6 +144,9 @@ function renderBatch() {
 }
 
 function rowForInsert(payload) {
+  if (!state.user) {
+    throw new Error("Sign in before submitting corrections.");
+  }
   return {
     ...payload,
     submitted_by: state.user.id,
@@ -144,17 +156,16 @@ function rowForInsert(payload) {
   };
 }
 
-async function submitRows(rows) {
-  if (!state.user) {
-    showToast("Sign in before submitting corrections.");
-    return;
-  }
+async function submitPayloads(payloads) {
+  if (!requireSignedIn()) return false;
+  const rows = payloads.map(rowForInsert);
   setSync("Submitting");
   const { error } = await supabaseClient.from("apollo_corrections").insert(rows);
   if (error) throw error;
   setSync("Ready");
   showToast(rows.length === 1 ? "Correction submitted." : `${rows.length} corrections submitted.`);
   await loadCorrections();
+  return true;
 }
 
 function addToBatch() {
@@ -335,7 +346,9 @@ async function loadProfile() {
     els.authPanel.classList.remove("hidden");
     els.userEmail.textContent = "Not yet";
     els.userRole.textContent = "Use email login to start.";
+    state.profile = null;
     setSync("Sign in");
+    renderBatch();
     return;
   }
 
@@ -363,6 +376,7 @@ async function loadProfile() {
 
   state.profile = data || { role: "submitter" };
   els.userRole.textContent = state.profile.role || "submitter";
+  renderBatch();
   await loadCorrections();
 }
 
@@ -405,8 +419,8 @@ els.form.addEventListener("submit", async (event) => {
       showToast("Add a question, wrong answer, or approved guidance first.");
       return;
     }
-    await submitRows([rowForInsert(payload)]);
-    clearCorrectionFields(true);
+    const submitted = await submitPayloads([payload]);
+    if (submitted) clearCorrectionFields(true);
   } catch (error) {
     setSync("Ready");
     showToast(error.message);
@@ -416,9 +430,11 @@ els.form.addEventListener("submit", async (event) => {
 els.addToBatch.addEventListener("click", addToBatch);
 els.submitBatch.addEventListener("click", async () => {
   try {
-    await submitRows(state.drafts.map(rowForInsert));
-    state.drafts = [];
-    renderBatch();
+    const submitted = await submitPayloads(state.drafts);
+    if (submitted) {
+      state.drafts = [];
+      renderBatch();
+    }
   } catch (error) {
     setSync("Ready");
     showToast(error.message);
