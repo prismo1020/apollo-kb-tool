@@ -17,6 +17,7 @@ const els = {
   category: document.getElementById("category"),
   reviewerLabel: document.getElementById("reviewerLabel"),
   reviewerNotes: document.getElementById("reviewerNotes"),
+  runAutomation: document.getElementById("runAutomation"),
   addToBatch: document.getElementById("addToBatch"),
   submitBatch: document.getElementById("submitBatch"),
   clearBatch: document.getElementById("clearBatch"),
@@ -272,6 +273,27 @@ async function loadCorrections() {
   setSync("Ready");
 }
 
+async function runAutomationNow() {
+  setSync("Triggering");
+  els.runAutomation.disabled = true;
+  try {
+    const { data, error } = await supabaseClient.functions.invoke("run-kb-automation", {
+      body: { source: "apollo-portal" },
+    });
+    if (error) throw error;
+    if (data && data.ok === false) {
+      throw new Error(data.error || "Automation trigger failed.");
+    }
+    setSync("Queued");
+    showToast("KB automation queued. Refresh in a minute or two.");
+  } finally {
+    window.setTimeout(() => {
+      els.runAutomation.disabled = false;
+      setSync("Ready");
+    }, 2500);
+  }
+}
+
 async function saveSelected(statusOverride = null) {
   const item = selectedCorrection();
   if (!item) return;
@@ -361,6 +383,13 @@ els.clearBatch.addEventListener("click", () => {
   renderBatch();
 });
 els.clearForm.addEventListener("click", () => clearCorrectionFields(false));
+els.runAutomation.addEventListener("click", () => {
+  runAutomationNow().catch((error) => {
+    els.runAutomation.disabled = false;
+    setSync("Ready");
+    showToast(error.message);
+  });
+});
 els.refreshQueue.addEventListener("click", () => loadCorrections().catch((error) => showToast(error.message)));
 els.statusFilter.addEventListener("change", () => loadCorrections().catch((error) => showToast(error.message)));
 els.modeExisting.addEventListener("click", () => setMode("existing"));

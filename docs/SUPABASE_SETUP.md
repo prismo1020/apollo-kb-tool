@@ -83,7 +83,36 @@ SUPABASE_SERVICE_ROLE_KEY
 
 The service role key is required only for the GitHub Action that writes applied status and commit metadata back to Supabase.
 
-## 7. Hosted Flow
+## 7. Deploy the Force Automation Button
+
+The portal's `Run Automation Now` button uses a Supabase Edge Function so the browser never sees a GitHub token.
+
+Create a GitHub fine-grained personal access token:
+
+1. Go to GitHub > Settings > Developer settings > Personal access tokens > Fine-grained tokens.
+2. Create a token for `prismo1020/apollo-kb-tool`.
+3. Give it repository permission for Actions: Read and write.
+4. Copy the token once.
+
+In Supabase:
+
+1. Go to Edge Functions > Secrets.
+2. Add:
+
+```text
+GITHUB_WORKFLOW_TOKEN = the GitHub token
+GITHUB_REPOSITORY = prismo1020/apollo-kb-tool
+GITHUB_WORKFLOW_FILE = apollo-kb-automation.yml
+GITHUB_WORKFLOW_REF = main
+```
+
+Then deploy the function:
+
+```powershell
+supabase functions deploy run-kb-automation --project-ref lexjlvnrqzplxthwkwfp
+```
+
+## 8. Hosted Flow
 
 1. Team member submits a correction in the portal.
 2. Supabase stores it as `submitted`.
