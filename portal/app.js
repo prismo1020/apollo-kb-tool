@@ -2,8 +2,6 @@ const config = window.APOLLO_CONFIG || {};
 const supabaseClient = window.supabase.createClient(config.supabaseUrl, config.supabaseAnonKey);
 
 const state = {
-  user: null,
-  profile: null,
   drafts: [],
   corrections: [],
   selectedId: null,
@@ -11,11 +9,6 @@ const state = {
 };
 
 const els = {
-  authPanel: document.getElementById("authPanel"),
-  emailInput: document.getElementById("emailInput"),
-  sendMagicLink: document.getElementById("sendMagicLink"),
-  userEmail: document.getElementById("userEmail"),
-  userRole: document.getElementById("userRole"),
   syncState: document.getElementById("syncState"),
   form: document.getElementById("correctionForm"),
   question: document.getElementById("question"),
@@ -84,16 +77,7 @@ function shortText(value, fallback = "Untitled correction") {
 }
 
 function isReviewer() {
-  return ["reviewer", "admin"].includes(state.profile?.role);
-}
-
-function requireSignedIn() {
-  if (state.user) return true;
-  els.authPanel.classList.remove("hidden");
-  els.authPanel.scrollIntoView({ behavior: "smooth", block: "start" });
-  setSync("Sign in");
-  showToast("Sign in with email before submitting corrections.");
-  return false;
+  return true;
 }
 
 function formPayload() {
@@ -124,7 +108,7 @@ function clearCorrectionFields(keepMeta = false) {
 
 function renderBatch() {
   els.batchCount.textContent = `${state.drafts.length} pending`;
-  els.submitBatch.disabled = !state.drafts.length || !state.user;
+  els.submitBatch.disabled = !state.drafts.length;
   els.clearBatch.disabled = !state.drafts.length;
   if (!state.drafts.length) {
     els.batchList.innerHTML = '<div class="batch-item muted">No queued corrections.</div>';
@@ -144,20 +128,15 @@ function renderBatch() {
 }
 
 function rowForInsert(payload) {
-  if (!state.user) {
-    throw new Error("Sign in before submitting corrections.");
-  }
   return {
     ...payload,
-    submitted_by: state.user.id,
-    submitter_email: state.user.email || "",
+    submitter_email: "",
     status: "submitted",
     mode: "existing",
   };
 }
 
 async function submitPayloads(payloads) {
-  if (!requireSignedIn()) return false;
   const rows = payloads.map(rowForInsert);
   setSync("Submitting");
   const { error } = await supabaseClient.from("apollo_corrections").insert(rows);
@@ -278,7 +257,6 @@ function renderDetail() {
 }
 
 async function loadCorrections() {
-  if (!state.user) return;
   setSync("Loading");
   const statuses = els.statusFilter.value.split(",");
   const { data, error } = await supabaseClient
@@ -319,10 +297,6 @@ async function saveSelected(statusOverride = null) {
 function openConfirm() {
   const item = selectedCorrection();
   if (!item) return;
-  if (!isReviewer()) {
-    showToast("Only reviewers can approve KB updates.");
-    return;
-  }
   if (!els.proposedReplacement.value.trim()) {
     showToast("Add proposed replacement guidance before approving.");
     return;
@@ -339,43 +313,7 @@ function openConfirm() {
   els.confirmLayer.classList.remove("hidden");
 }
 
-async function loadProfile() {
-  const { data: sessionData } = await supabaseClient.auth.getSession();
-  state.user = sessionData.session?.user || null;
-  if (!state.user) {
-    els.authPanel.classList.remove("hidden");
-    els.userEmail.textContent = "Not yet";
-    els.userRole.textContent = "Use email login to start.";
-    state.profile = null;
-    setSync("Sign in");
-    renderBatch();
-    return;
-  }
-
-  els.authPanel.classList.add("hidden");
-  els.userEmail.textContent = state.user.email || "Signed in";
-
-  let { data, error } = await supabaseClient
-    .from("apollo_profiles")
-    .select("*")
-    .eq("user_id", state.user.id)
-    .maybeSingle();
-
-  if (error) throw error;
-  if (!data) {
-    await new Promise((resolve) => window.setTimeout(resolve, 900));
-    const retry = await supabaseClient
-      .from("apollo_profiles")
-      .select("*")
-      .eq("user_id", state.user.id)
-      .maybeSingle();
-    data = retry.data;
-    error = retry.error;
-    if (error) throw error;
-  }
-
-  state.profile = data || { role: "submitter" };
-  els.userRole.textContent = state.profile.role || "submitter";
+async function initializePortal() {
   renderBatch();
   await loadCorrections();
 }
@@ -387,28 +325,6 @@ document.querySelectorAll(".nav-item").forEach((button) => {
     button.classList.add("active");
     document.getElementById(`${button.dataset.view}View`).classList.add("active");
   });
-});
-
-els.sendMagicLink.addEventListener("click", async () => {
-  try {
-    const email = els.emailInput.value.trim();
-    if (!email) {
-      showToast("Enter your email first.");
-      return;
-    }
-    setSync("Sending");
-    const redirectTo = `${window.location.origin}${window.location.pathname}`;
-    const { error } = await supabaseClient.auth.signInWithOtp({
-      email,
-      options: { emailRedirectTo: redirectTo },
-    });
-    if (error) throw error;
-    setSync("Check email");
-    showToast("Magic link sent.");
-  } catch (error) {
-    setSync("Sign in");
-    showToast(error.message);
-  }
 });
 
 els.form.addEventListener("submit", async (event) => {
@@ -463,12 +379,8 @@ els.confirmApprove.addEventListener("click", () => {
     .catch((error) => showToast(error.message));
 });
 
-supabaseClient.auth.onAuthStateChange(() => {
-  loadProfile().catch((error) => showToast(error.message));
-});
-
 renderBatch();
-loadProfile().catch((error) => {
+initializePortal().catch((error) => {
   setSync("Needs attention");
   showToast(error.message);
 });

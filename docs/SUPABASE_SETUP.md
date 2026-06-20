@@ -24,6 +24,8 @@ This setup keeps the browser safe:
 4. Paste everything from `supabase/schema.sql`.
 5. Click Run.
 
+For the open-link prototype, also run `supabase/public_access.sql`. This removes the sign-in requirement so anyone with the portal URL can submit and approve correction rows.
+
 ## 3. Enable Login
 
 The simplest first version is email login.

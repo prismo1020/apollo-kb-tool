@@ -176,29 +176,12 @@ h3 {
   font-size: 13px;
 }
 
-.auth-panel,
 .panel,
 .activity-band {
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 8px;
   box-shadow: var(--shadow);
-}
-
-.auth-panel {
-  padding: 18px;
-  margin-bottom: 18px;
-}
-
-.auth-panel.hidden {
-  display: none;
-}
-
-.auth-row {
-  display: grid;
-  grid-template-columns: minmax(0, 420px) auto;
-  gap: 12px;
-  align-items: end;
 }
 
 .layout-grid {
@@ -528,10 +511,6 @@ textarea:focus {
   .review-layout,
   .diff-grid,
   .field-row,
-  .auth-row {
-    grid-template-columns: 1fr;
-  }
-
   .rail {
     position: static;
   }
