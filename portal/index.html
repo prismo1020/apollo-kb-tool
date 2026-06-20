@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Apollo KB Portal</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="rail">
+        <div class="brand">
+          <div>
+            <div class="wordmark">SANDBOX VR</div>
+            <div class="product-name">Apollo KB</div>
+          </div>
+        </div>
+
+        <nav class="nav-list" aria-label="Main">
+          <button class="nav-item active" type="button" data-view="submit">Submit</button>
+          <button class="nav-item" type="button" data-view="review">Review</button>
+          <button class="nav-item" type="button" data-view="activity">Activity</button>
+        </nav>
+
+        <div class="status-block">
+          <span class="label">Signed in</span>
+          <strong id="userEmail">Not yet</strong>
+          <span class="muted" id="userRole">Use email login to start.</span>
+        </div>
+      </aside>
+
+      <main class="workspace">
+        <header class="topbar">
+          <div>
+            <h1>Apollo Correction Portal</h1>
+          </div>
+          <div class="top-actions">
+            <div class="sandbox-logo" aria-label="Sandbox VR">
+              <img id="sandboxLogo" src="./sandbox-logo-black.png" alt="Sandbox VR" onerror="this.classList.add('missing')" />
+              <span>SANDBOX VR</span>
+            </div>
+            <span class="sync-pill" id="syncState">Connecting</span>
+          </div>
+        </header>
+
+        <section class="auth-panel" id="authPanel">
+          <div class="section-title">
+            <h2>Email Login</h2>
+            <span class="rule"></span>
+          </div>
+          <div class="auth-row">
+            <label class="field">
+              <span>Email</span>
+              <input id="emailInput" type="email" autocomplete="email" placeholder="name@sandboxvr.com" />
+            </label>
+            <button class="button primary" id="sendMagicLink" type="button">Send Link</button>
+          </div>
+        </section>
+
+        <section class="view active" id="submitView">
+          <div class="layout-grid">
+            <form class="panel correction-panel" id="correctionForm">
+              <div class="section-title">
+                <h2>Correction Intake</h2>
+                <span class="rule"></span>
+              </div>
+
+              <label class="field">
+                <span>User question</span>
+                <textarea id="question" rows="4" placeholder="Paste the question that exposed the bad answer."></textarea>
+              </label>
+
+              <label class="field">
+                <span>Apollo's wrong answer</span>
+                <textarea id="wrongAnswer" rows="5" placeholder="Paste the answer Apollo gave."></textarea>
+              </label>
+
+              <label class="field">
+                <span>Approved answer or guidance</span>
+                <textarea id="approvedAnswer" rows="5" placeholder="Optional, but best when known."></textarea>
+              </label>
+
+              <div class="field-row">
+                <label class="field">
+                  <span>Category</span>
+                  <select id="category">
+                    <option value="">Auto-detect</option>
+                    <option>TECH</option>
+                    <option>OPERATIONS</option>
+                    <option>POLICY</option>
+                    <option>EXPERIENCES</option>
+                    <option>SYSTEMS</option>
+                    <option>ADMIN</option>
+                    <option>STAFF</option>
+                    <option>GUEST</option>
+                    <option>VISUAL</option>
+                    <option>OPS_FLOW</option>
+                    <option>CORRECTION</option>
+                  </select>
+                </label>
+
+                <label class="field">
+                  <span>Reviewer</span>
+                  <input id="reviewerLabel" type="text" placeholder="Name or initials" />
+                </label>
+              </div>
+
+              <label class="field">
+                <span>Reviewer notes</span>
+                <textarea id="reviewerNotes" rows="3" placeholder="Optional context for future reviewers."></textarea>
+              </label>
+
+              <div class="button-row">
+                <button class="button primary" type="submit">Submit Single</button>
+                <button class="button secondary" id="addToBatch" type="button">Add to Batch</button>
+                <button class="button quiet" id="clearForm" type="button">Clear</button>
+              </div>
+
+              <div class="batch-workbench">
+                <div class="batch-head">
+                  <h3>Batch Queue</h3>
+                  <span id="batchCount">0 pending</span>
+                </div>
+                <div class="batch-list" id="batchList"></div>
+                <div class="button-row">
+                  <button class="button primary" id="submitBatch" type="button">Submit Batch</button>
+                  <button class="button quiet" id="clearBatch" type="button">Clear Batch</button>
+                </div>
+              </div>
+            </form>
+
+            <section class="panel review-panel">
+              <div class="section-title">
+                <h2>What Happens Next</h2>
+                <span class="rule"></span>
+              </div>
+              <div class="status-ladder">
+                <div>
+                  <strong>Submitted</strong>
+                  <span>Correction is saved to Supabase.</span>
+                </div>
+                <div>
+                  <strong>Analysis Ready</strong>
+                  <span>GitHub checks the KB and drafts a section edit.</span>
+                </div>
+                <div>
+                  <strong>Approved</strong>
+                  <span>A reviewer confirms the proposed replacement.</span>
+                </div>
+                <div>
+                  <strong>Applied</strong>
+                  <span>GitHub updates the KB file and links the commit.</span>
+                </div>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="reviewView">
+          <div class="review-layout">
+            <section class="panel queue-panel">
+              <div class="section-title">
+                <h2>Correction Queue</h2>
+                <span class="rule"></span>
+              </div>
+              <div class="toolbar-row">
+                <select id="statusFilter">
+                  <option value="submitted,analysis_ready,needs_review,approved,processing,failed">Active</option>
+                  <option value="submitted">Submitted</option>
+                  <option value="analysis_ready,needs_review">Ready for Review</option>
+                  <option value="approved,processing">Approved / Processing</option>
+                  <option value="applied">Applied</option>
+                  <option value="failed">Failed</option>
+                </select>
+                <button class="button secondary" id="refreshQueue" type="button">Refresh</button>
+              </div>
+              <div class="queue-list" id="queueList"></div>
+            </section>
+
+            <section class="panel detail-panel">
+              <div class="section-title">
+                <h2>Approval Review</h2>
+                <span class="rule"></span>
+              </div>
+              <div class="empty-state" id="emptyDetail">
+                <strong>No correction selected</strong>
+                <span>Choose a queue item to review the drafted KB update.</span>
+              </div>
+
+              <div class="detail-content hidden" id="detailContent">
+                <div class="detail-head">
+                  <div>
+                    <p class="kicker" id="detailStatus">Status</p>
+                    <h3 id="detailTitle">Correction</h3>
+                  </div>
+                  <a id="commitLink" class="commit-link hidden" target="_blank" rel="noreferrer">View Commit</a>
+                </div>
+
+                <div class="decision-strip">
+                  <button class="decision active" id="modeExisting" type="button">Update file</button>
+                  <button class="decision" id="modeNew" type="button">New file</button>
+                </div>
+
+                <div class="field-row">
+                  <label class="field">
+                    <span>Target file</span>
+                    <input id="targetFile" type="text" />
+                  </label>
+                  <label class="field">
+                    <span>Section heading</span>
+                    <input id="targetSection" type="text" />
+                  </label>
+                </div>
+
+                <div class="field-row new-fields">
+                  <label class="field">
+                    <span>New file topic</span>
+                    <input id="newTopic" type="text" />
+                  </label>
+                  <label class="field">
+                    <span>New file purpose</span>
+                    <input id="newPurpose" type="text" />
+                  </label>
+                </div>
+
+                <div class="diff-grid">
+                  <label class="field">
+                    <span>Current KB section</span>
+                    <textarea id="currentSection" rows="14" readonly></textarea>
+                  </label>
+                  <label class="field">
+                    <span>Proposed replacement section</span>
+                    <textarea id="proposedReplacement" rows="14"></textarea>
+                  </label>
+                </div>
+
+                <div class="button-row end">
+                  <button class="button secondary" id="saveDraft" type="button">Save Draft</button>
+                  <button class="button primary" id="openConfirm" type="button">Approve Update</button>
+                </div>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="activityView">
+          <section class="activity-band">
+            <div class="section-title compact">
+              <h2>Recent Updates</h2>
+              <span class="rule"></span>
+            </div>
+            <div id="activityList" class="recent-list"></div>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <div class="confirm-layer hidden" id="confirmLayer" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
+      <div class="confirm-bubble">
+        <p class="kicker">Confirmation</p>
+        <h2 id="confirmTitle">Approve this KB update?</h2>
+        <p id="confirmText" class="confirm-copy"></p>
+        <label class="checkline">
+          <input id="reviewedCheck" type="checkbox" />
+          <span>I reviewed the target file and proposed guidance.</span>
+        </label>
+        <div class="button-row end">
+          <button class="button quiet" id="cancelConfirm" type="button">Cancel</button>
+          <button class="button primary" id="confirmApprove" type="button" disabled>Approve</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="toast hidden" id="toast"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="./config.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>
