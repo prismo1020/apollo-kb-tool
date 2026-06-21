@@ -3,49 +3,60 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Apollo KB Portal</title>
+    <title>Apollo KB Portal — Sandbox VR</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link href="https://fonts.googleapis.com/css2?family=Gordita:wght@400;500;700;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
     <div class="app-shell">
+
+      <!-- ── SIDEBAR ── -->
       <aside class="rail">
         <div class="brand">
-          <div>
-            <div class="wordmark">SANDBOX VR</div>
-            <div class="product-name">Apollo KB</div>
-          </div>
+          <div class="brand-eyebrow">Sandbox VR</div>
+          <div class="wordmark">Apollo KB</div>
+          <div class="product-name">Correction Portal</div>
         </div>
 
-        <nav class="nav-list" aria-label="Main">
-          <button class="nav-item active" type="button" data-view="submit">Submit</button>
-          <button class="nav-item" type="button" data-view="review">Review</button>
-          <button class="nav-item" type="button" data-view="activity">Activity</button>
+        <div class="nav-label">Navigation</div>
+        <nav aria-label="Main">
+          <button class="nav-item active" type="button" data-view="submit">
+            <span class="nav-dot"></span>Submit Correction
+          </button>
+          <button class="nav-item" type="button" data-view="review">
+            <span class="nav-dot"></span>Review Queue
+          </button>
+          <button class="nav-item" type="button" data-view="activity">
+            <span class="nav-dot"></span>Activity Log
+          </button>
         </nav>
 
         <div class="status-block">
           <span class="label">Access</span>
           <strong>Open link</strong>
-          <span class="muted">Anyone with the portal URL can submit and approve prototype corrections.</span>
+          <span class="muted">Anyone with the portal URL can submit and approve corrections.</span>
         </div>
       </aside>
 
+      <!-- ── MAIN WORKSPACE ── -->
       <main class="workspace">
+
         <header class="topbar">
           <div>
             <h1>Apollo Correction Portal</h1>
+            <div class="topbar-sub">Submit a bad answer · Review KB edits · Approve to publish</div>
           </div>
           <div class="top-actions">
-            <div class="sandbox-logo" aria-label="Sandbox VR">
-              <img id="sandboxLogo" src="./sandbox-logo-black.png" alt="Sandbox VR" onerror="this.classList.add('missing')" />
-              <span>SANDBOX VR</span>
-            </div>
             <button class="button secondary compact" id="runAutomation" type="button">Run Automation Now</button>
             <span class="sync-pill" id="syncState">Connecting</span>
           </div>
         </header>
 
+        <!-- ── SUBMIT VIEW ── -->
         <section class="view active" id="submitView">
           <div class="layout-grid">
+
             <form class="panel correction-panel" id="correctionForm">
               <div class="section-title">
                 <h2>Correction Intake</h2>
@@ -54,17 +65,23 @@
 
               <label class="field">
                 <span>User question</span>
-                <textarea id="question" rows="4" placeholder="Paste the question that exposed the bad answer."></textarea>
+                <textarea id="question" rows="3" placeholder="Paste the question that exposed the bad answer."></textarea>
               </label>
 
               <label class="field">
                 <span>Apollo's wrong answer</span>
-                <textarea id="wrongAnswer" rows="5" placeholder="Paste the answer Apollo gave."></textarea>
+                <textarea id="wrongAnswer" rows="4" placeholder="Paste the answer Apollo gave."></textarea>
               </label>
 
               <label class="field">
                 <span>Approved answer or guidance</span>
-                <textarea id="approvedAnswer" rows="5" placeholder="Optional, but best when known."></textarea>
+                <textarea id="approvedAnswer" rows="4" placeholder="What should Apollo say instead?"></textarea>
+              </label>
+
+              <label class="field">
+                <span>Oasis SOP link</span>
+                <input id="oasisLink" type="url" placeholder="https://sites.google.com/sandboxvr.com/theoasis/..." />
+                <span class="field-hint">Required for procedural topics. Paste the Oasis page URL.</span>
               </label>
 
               <div class="field-row">
@@ -94,7 +111,7 @@
 
               <label class="field">
                 <span>Reviewer notes</span>
-                <textarea id="reviewerNotes" rows="3" placeholder="Optional context for future reviewers."></textarea>
+                <textarea id="reviewerNotes" rows="2" placeholder="Optional context for future reviewers."></textarea>
               </label>
 
               <div class="button-row">
@@ -116,7 +133,7 @@
               </div>
             </form>
 
-            <section class="panel review-panel">
+            <section class="panel">
               <div class="section-title">
                 <h2>What Happens Next</h2>
                 <span class="rule"></span>
@@ -124,33 +141,40 @@
               <div class="status-ladder">
                 <div>
                   <strong>Submitted</strong>
-                  <span>Correction is saved to Supabase.</span>
+                  <span>Correction is saved to Supabase and queued for analysis.</span>
                 </div>
                 <div>
                   <strong>Analysis Ready</strong>
-                  <span>GitHub checks the KB and drafts a section edit.</span>
+                  <span>Apollo KB Editor (Chatbase) drafts a clean KB section rewrite.</span>
+                </div>
+                <div>
+                  <strong>Needs Review</strong>
+                  <span>Low confidence or missing Oasis link — human must verify before approving.</span>
                 </div>
                 <div>
                   <strong>Approved</strong>
-                  <span>A reviewer confirms the proposed replacement.</span>
+                  <span>A reviewer confirms the proposed replacement in the Review Queue.</span>
                 </div>
                 <div>
                   <strong>Applied</strong>
-                  <span>GitHub updates the KB file and links the commit.</span>
+                  <span>GitHub Action updates the KB file and logs the commit.</span>
                 </div>
               </div>
             </section>
+
           </div>
         </section>
 
+        <!-- ── REVIEW VIEW ── -->
         <section class="view" id="reviewView">
           <div class="review-layout">
+
             <section class="panel queue-panel">
               <div class="section-title">
                 <h2>Correction Queue</h2>
                 <span class="rule"></span>
               </div>
-              <div class="toolbar-row">
+              <div class="toolbar-row" style="margin-bottom:14px">
                 <select id="statusFilter">
                   <option value="submitted,analysis_ready,needs_review,approved,processing,failed">Active</option>
                   <option value="submitted">Submitted</option>
@@ -159,7 +183,7 @@
                   <option value="applied">Applied</option>
                   <option value="failed">Failed</option>
                 </select>
-                <button class="button secondary" id="refreshQueue" type="button">Refresh</button>
+                <button class="button secondary compact" id="refreshQueue" type="button">Refresh</button>
               </div>
               <div class="queue-list" id="queueList"></div>
             </section>
@@ -169,6 +193,7 @@
                 <h2>Approval Review</h2>
                 <span class="rule"></span>
               </div>
+
               <div class="empty-state" id="emptyDetail">
                 <strong>No correction selected</strong>
                 <span>Choose a queue item to review the drafted KB update.</span>
@@ -180,12 +205,23 @@
                     <p class="kicker" id="detailStatus">Status</p>
                     <h3 id="detailTitle">Correction</h3>
                   </div>
-                  <a id="commitLink" class="commit-link hidden" target="_blank" rel="noreferrer">View Commit</a>
+                  <a id="commitLink" class="commit-link hidden" target="_blank" rel="noreferrer">View Commit →</a>
+                </div>
+
+                <!-- Oasis link missing warning -->
+                <div class="alert-banner warning hidden" id="oasisWarning">
+                  ⚠ No Oasis SOP link was provided. Add one before approving if this is a procedural topic.
+                </div>
+
+                <!-- LLM reasoning block -->
+                <div class="alert-banner" id="reasoningBlock" style="display:none;background:var(--trigger-light);border-color:var(--phaser);color:var(--text-primary);flex-direction:column;align-items:flex-start;gap:4px">
+                  <strong style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--trigger)">KB Editor Reasoning</strong>
+                  <span id="reasoningText" style="font-size:13px;font-weight:400"></span>
                 </div>
 
                 <div class="decision-strip">
-                  <button class="decision active" id="modeExisting" type="button">Update file</button>
-                  <button class="decision" id="modeNew" type="button">New file</button>
+                  <button class="decision active" id="modeExisting" type="button">Update existing file</button>
+                  <button class="decision" id="modeNew" type="button">Create new file</button>
                 </div>
 
                 <div class="field-row">
@@ -213,23 +249,25 @@
                 <div class="diff-grid">
                   <label class="field">
                     <span>Current KB section</span>
-                    <textarea id="currentSection" rows="14" readonly></textarea>
+                    <textarea id="currentSection" rows="16" readonly style="background:var(--surface);font-family:monospace;font-size:12px"></textarea>
                   </label>
                   <label class="field">
-                    <span>Proposed replacement section</span>
-                    <textarea id="proposedReplacement" rows="14"></textarea>
+                    <span>Proposed replacement — edit before approving</span>
+                    <textarea id="proposedReplacement" rows="16" style="font-family:monospace;font-size:12px"></textarea>
                   </label>
                 </div>
 
                 <div class="button-row end">
-                  <button class="button secondary" id="saveDraft" type="button">Save Draft</button>
-                  <button class="button primary" id="openConfirm" type="button">Approve Update</button>
+                  <button class="button quiet" id="saveDraft" type="button">Save Draft</button>
+                  <button class="button primary" id="openConfirm" type="button">Approve Update →</button>
                 </div>
               </div>
             </section>
+
           </div>
         </section>
 
+        <!-- ── ACTIVITY VIEW ── -->
         <section class="view" id="activityView">
           <section class="activity-band">
             <div class="section-title compact">
@@ -239,25 +277,28 @@
             <div id="activityList" class="recent-list"></div>
           </section>
         </section>
+
       </main>
     </div>
 
+    <!-- ── CONFIRM MODAL ── -->
     <div class="confirm-layer hidden" id="confirmLayer" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
       <div class="confirm-bubble">
-        <p class="kicker">Confirmation</p>
+        <p class="kicker">Confirmation required</p>
         <h2 id="confirmTitle">Approve this KB update?</h2>
         <p id="confirmText" class="confirm-copy"></p>
         <label class="checkline">
           <input id="reviewedCheck" type="checkbox" />
-          <span>I reviewed the target file and proposed guidance.</span>
+          <span>I reviewed the target file and proposed replacement and confirm the guidance is accurate.</span>
         </label>
         <div class="button-row end">
           <button class="button quiet" id="cancelConfirm" type="button">Cancel</button>
-          <button class="button primary" id="confirmApprove" type="button" disabled>Approve</button>
+          <button class="button primary" id="confirmApprove" type="button" disabled>Approve &amp; Publish →</button>
         </div>
       </div>
     </div>
 
+    <!-- ── TOAST ── -->
     <div class="toast hidden" id="toast"></div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
