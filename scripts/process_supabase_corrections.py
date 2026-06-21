@@ -11,6 +11,8 @@ from typing import Any
 
 import requests
 
+from llm_kb_editor import llm_edit_section
+
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 LOGIC_PATH = REPO_ROOT / "apollo-correction-tool" / "server.py"
@@ -91,6 +93,7 @@ def payload_from_row(row: dict[str, Any]) -> dict[str, Any]:
         "category": row.get("category") or "",
         "submitter": row.get("reviewer_label") or row.get("submitter_email") or "",
         "notes": row.get("reviewer_notes") or "",
+        "oasis_link": row.get("oasis_link") or "",
         "new_topic": row.get("new_topic") or "",
         "new_purpose": row.get("new_purpose") or "",
     }
@@ -110,40 +113,68 @@ def analyze_submitted() -> int:
     for row in rows:
         try:
             payload = payload_from_row(row)
+
+            # Step 1: find candidate files/sections using existing keyword logic
             matches = logic.find_matches(payload)
             action = logic.proposed_action(matches)
-            draft = logic.draft_preview(payload)
             top = matches[0] if matches else {}
-            if action == "update_existing" and top:
-                update = {
-                    "status": "analysis_ready",
-                    "mode": "existing",
-                    "target_file": top.get("file"),
-                    "target_section_heading": top.get("section_heading"),
-                    "current_section": top.get("section_text") or "",
-                    "proposed_replacement": top.get("proposed_text") or draft,
-                    "analysis": {
-                        "suggested_action": action,
-                        "matches": matches[:5],
-                        "draft": draft,
-                    },
-                    "failure_reason": None,
-                }
+
+            candidate_file = top.get("file", "") if top else ""
+            candidate_heading = top.get("section_heading", "") if top else ""
+            current_section_text = top.get("section_text", "") if top else ""
+
+            # Step 2: LLM holistic rewrite
+            llm_result = llm_edit_section(
+                payload,
+                candidate_file=candidate_file,
+                candidate_heading=candidate_heading,
+                current_section_text=current_section_text,
+            )
+
+            proposed_replacement = (llm_result.get("proposed_replacement_section") or "").strip()
+            confidence = llm_result.get("confidence", "Low")
+            new_file_recommended = llm_result.get("new_file_recommended", False)
+            oasis_link_missing = llm_result.get("oasis_link_missing", False)
+
+            # New file, low confidence, or missing Oasis link all require human review
+            needs_review = (
+                new_file_recommended
+                or action == "new_file"
+                or confidence == "Low"
+                or oasis_link_missing
+            )
+
+            if new_file_recommended or action == "new_file":
+                mode = "new"
+                target_file = None
+                target_heading = None
+                current_section = ""
             else:
-                update = {
-                    "status": "needs_review",
-                    "mode": "new",
-                    "target_file": None,
-                    "target_section_heading": None,
-                    "current_section": "",
-                    "proposed_replacement": draft,
-                    "analysis": {
-                        "suggested_action": "new_file",
-                        "matches": matches[:5],
-                        "draft": draft,
-                    },
-                    "failure_reason": None,
-                }
+                mode = "existing"
+                target_file = llm_result.get("target_file") or candidate_file or None
+                target_heading = llm_result.get("target_section_heading") or candidate_heading or None
+                current_section = current_section_text
+
+            update = {
+                "status": "needs_review" if needs_review else "analysis_ready",
+                "mode": mode,
+                "target_file": target_file,
+                "target_section_heading": target_heading,
+                "current_section": current_section,
+                "proposed_replacement": proposed_replacement,
+                "analysis": {
+                    "llm_reasoning": llm_result.get("reasoning_summary"),
+                    "llm_confidence": confidence,
+                    "current_problem": llm_result.get("current_problem"),
+                    "oasis_link_missing": oasis_link_missing,
+                    "do_not_rules_added": llm_result.get("do_not_rules_added", []),
+                    "new_file_recommended": new_file_recommended,
+                    "new_file_title": llm_result.get("new_file_title"),
+                    "keyword_matches": matches[:5],
+                    "keyword_action": action,
+                },
+                "failure_reason": None,
+            }
             supabase_patch("apollo_corrections", row["id"], update)
             processed += 1
         except Exception as exc:
