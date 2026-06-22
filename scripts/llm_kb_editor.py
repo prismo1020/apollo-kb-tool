@@ -71,6 +71,55 @@ def llm_edit_section(
     return result
 
 
+def llm_identify_files(
+    payload: dict[str, Any],
+    kb_index: str,
+) -> list[str]:
+    """Phase 1: ask the File Identifier bot which files are affected by this correction."""
+    api_key = os.environ.get("CHATBASE_API_KEY", "")
+    bot_id = os.environ.get("CHATBASE_FILE_IDENTIFIER_BOT_ID", "")
+    if not api_key:
+        raise RuntimeError("CHATBASE_API_KEY environment variable is not set.")
+    if not bot_id:
+        raise RuntimeError("CHATBASE_FILE_IDENTIFIER_BOT_ID environment variable is not set.")
+
+    user_message = (
+        f"CORRECTION:\n"
+        f"Question: {payload.get('question', '').strip()}\n"
+        f"Wrong answer Apollo gave: {payload.get('wrong_answer', '').strip()}\n"
+        f"Correct guidance: {payload.get('correct_answer', '').strip()}\n"
+        f"Category: {payload.get('category', '').strip()}\n"
+        f"Reviewer notes: {payload.get('notes', '').strip()}\n\n"
+        f"KB FILE INDEX (filename : section headings):\n{kb_index}"
+    )
+
+    response = requests.post(
+        CHATBASE_CHAT_URL,
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+        json={
+            "chatbotId": bot_id,
+            "messages": [{"role": "user", "content": user_message}],
+            "stream": False,
+        },
+        timeout=REQUEST_TIMEOUT,
+    )
+    response.raise_for_status()
+
+    raw = response.json().get("text", "").strip()
+    if raw.startswith("```"):
+        lines = raw.splitlines()
+        raw = "\n".join(line for line in lines if not line.startswith("```")).strip()
+
+    result: dict[str, Any] = json.loads(raw)
+    files = result.get("affected_files", [])
+    if not isinstance(files, list):
+        raise ValueError("File identifier bot returned non-list affected_files.")
+    return [str(f) for f in files if f]
+
+
 def _build_user_message(
     payload: dict[str, Any],
     candidate_file: str,

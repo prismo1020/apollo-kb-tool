@@ -863,6 +863,109 @@ input:focus, select:focus, textarea:focus {
   transition: width 0.2s ease;
 }
 
+/* ── MULTI-TARGET CARDS ── */
+
+.multi-target-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.target-card-list {
+  max-height: 520px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.target-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  background: var(--white);
+}
+
+.target-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.target-include-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.target-filename {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.target-section-name {
+  font-size: 11px;
+  font-family: monospace;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.target-reasoning {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin-bottom: 8px;
+}
+
+.target-diff-toggle {
+  margin-top: 8px;
+}
+
+.target-diff-toggle > summary {
+  font-size: 12px;
+  color: var(--trigger);
+  cursor: pointer;
+  user-select: none;
+  font-weight: 600;
+}
+
+.readonly-diff {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  font-family: monospace;
+  font-size: 11px;
+  white-space: pre-wrap;
+  overflow-y: auto;
+  max-height: 240px;
+  color: var(--text-secondary);
+  width: 100%;
+}
+
+.editable-diff {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  font-family: monospace;
+  font-size: 11px;
+  width: 100%;
+  resize: vertical;
+  color: var(--text-primary);
+}
+
+.editable-diff:focus {
+  outline: none;
+  border-color: var(--trigger);
+  box-shadow: 0 0 0 3px var(--trigger-light);
+}
+
 /* ── RESPONSIVE ── */
 
 @media (max-width: 1024px) {

@@ -285,15 +285,27 @@
                   </label>
                 </div>
 
-                <div class="diff-grid">
-                  <label class="field">
-                    <span>Current KB section</span>
-                    <textarea id="currentSection" rows="16" readonly style="background:var(--surface);font-family:monospace;font-size:12px"></textarea>
-                  </label>
-                  <label class="field">
-                    <span>Proposed replacement — edit before approving</span>
-                    <textarea id="proposedReplacement" rows="16" style="font-family:monospace;font-size:12px"></textarea>
-                  </label>
+                <!-- Single-target diff (hidden when multi-target) -->
+                <div id="singleTargetArea">
+                  <div class="diff-grid">
+                    <label class="field">
+                      <span>Current KB section</span>
+                      <textarea id="currentSection" rows="16" readonly style="background:var(--surface);font-family:monospace;font-size:12px"></textarea>
+                    </label>
+                    <label class="field">
+                      <span>Proposed replacement — edit before approving</span>
+                      <textarea id="proposedReplacement" rows="16" style="font-family:monospace;font-size:12px"></textarea>
+                    </label>
+                  </div>
+                </div>
+
+                <!-- Multi-target area (hidden when single-target) -->
+                <div id="multiTargetArea" class="hidden">
+                  <div class="multi-target-header">
+                    <span class="label">Files to update</span>
+                    <span id="multiTargetCount" class="status-chip submitted"></span>
+                  </div>
+                  <div class="target-card-list" id="targetCardList"></div>
                 </div>
 
                 <!-- Applied actions -->
@@ -349,6 +361,17 @@
               </div>
               <p id="exportProgressLabel" style="font-size:12px;color:var(--text-secondary);margin-top:6px"></p>
             </div>
+          </section>
+
+          <section class="panel" style="margin-bottom:20px">
+            <div class="section-title">
+              <h2>Patch Notes</h2>
+              <span class="rule"></span>
+            </div>
+            <p style="font-size:13px;color:var(--text-secondary);margin-bottom:16px;line-height:1.6">
+              Generate a plain-language changelog of all corrections applied in the last 7 days. Written by the Apollo Patch Notes AI — readable by managers, coaches, and L&D.
+            </p>
+            <button class="button secondary" id="patchNotesBtn" type="button">Download Patch Notes (Last 7 Days)</button>
           </section>
 
           <section class="activity-band">

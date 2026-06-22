@@ -11,7 +11,7 @@ from typing import Any
 
 import requests
 
-from llm_kb_editor import llm_edit_section
+from llm_kb_editor import llm_edit_section, llm_identify_files
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -99,6 +99,17 @@ def payload_from_row(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def build_kb_index() -> str:
+    """Build a compact filename:headings index of every KB file for the File Identifier bot."""
+    records = logic.load_index()
+    lines = []
+    for record in records:
+        headings = [s["heading"] for s in record.get("sections", [])]
+        heading_str = ", ".join(headings[:6]) if headings else "(no sections)"
+        lines.append(f"{record['file']} : {heading_str}")
+    return "\n".join(lines)
+
+
 def analyze_submitted() -> int:
     rows = supabase_get(
         "apollo_corrections",
@@ -109,69 +120,127 @@ def analyze_submitted() -> int:
             "limit": "25",
         },
     )
+    if not rows:
+        return 0
+
+    # Build KB index once for the entire batch — expensive to rebuild per row
+    kb_index = build_kb_index()
+    all_records = logic.load_index()
+    records_by_file = {r["file"]: r for r in all_records}
+
     processed = 0
     for row in rows:
         try:
             payload = payload_from_row(row)
 
-            # Step 1: find candidate files/sections using existing keyword logic
-            matches = logic.find_matches(payload)
-            action = logic.proposed_action(matches)
-            top = matches[0] if matches else {}
+            # Phase 1: identify all files affected by this correction
+            try:
+                affected_file_paths = llm_identify_files(payload, kb_index)
+            except Exception as identify_exc:
+                # Fall back to keyword matching if file identifier fails
+                print(f"File identifier failed, falling back to keyword matching: {identify_exc}")
+                matches = logic.find_matches(payload)
+                top = matches[0] if matches else {}
+                affected_file_paths = [top["file"]] if top else []
 
-            candidate_file = top.get("file", "") if top else ""
-            candidate_heading = top.get("section_heading", "") if top else ""
-            current_section_text = top.get("section_text", "") if top else ""
+            # Filter to files that actually exist in our index
+            affected_file_paths = [f for f in affected_file_paths if f in records_by_file][:15]
 
-            # Step 2: LLM holistic rewrite
-            llm_result = llm_edit_section(
-                payload,
-                candidate_file=candidate_file,
-                candidate_heading=candidate_heading,
-                current_section_text=current_section_text,
-            )
+            if not affected_file_paths:
+                supabase_patch(
+                    "apollo_corrections",
+                    row["id"],
+                    {
+                        "status": "needs_review",
+                        "analysis": {"error": "No matching KB files identified. Manual file selection required."},
+                        "failure_reason": None,
+                    },
+                )
+                processed += 1
+                continue
 
-            proposed_replacement = (llm_result.get("proposed_replacement_section") or "").strip()
-            confidence = llm_result.get("confidence", "Low")
-            new_file_recommended = llm_result.get("new_file_recommended", False)
-            oasis_link_missing = llm_result.get("oasis_link_missing", False)
+            # Phase 2: for each identified file, find best section and get LLM edit
+            query = "\n".join([
+                payload.get("question", ""),
+                payload.get("wrong_answer", ""),
+                payload.get("correct_answer", ""),
+            ])
+            query_tokens = set(logic.tokenize(query))
 
-            # New file, low confidence, or missing Oasis link all require human review
-            needs_review = (
-                new_file_recommended
-                or action == "new_file"
-                or confidence == "Low"
-                or oasis_link_missing
-            )
+            targets: list[dict[str, Any]] = []
+            for file_path in affected_file_paths:
+                record = records_by_file.get(file_path)
+                if not record:
+                    continue
+                section = logic.best_section(record, query_tokens) if query_tokens else None
+                section_heading = section["heading"] if section else ""
+                section_text = section["text"] if section else ""
 
-            if new_file_recommended or action == "new_file":
-                mode = "new"
-                target_file = None
-                target_heading = None
-                current_section = ""
-            else:
-                mode = "existing"
-                target_file = llm_result.get("target_file") or candidate_file or None
-                target_heading = llm_result.get("target_section_heading") or candidate_heading or None
-                current_section = current_section_text
+                try:
+                    edit_result = llm_edit_section(payload, file_path, section_heading, section_text)
+                    targets.append({
+                        "file": file_path,
+                        "section_heading": edit_result.get("target_section_heading") or section_heading,
+                        "current_section": section_text,
+                        "proposed_replacement": (edit_result.get("proposed_replacement_section") or "").strip(),
+                        "confidence": edit_result.get("confidence", "Low"),
+                        "reasoning": edit_result.get("reasoning_summary", ""),
+                        "oasis_link_missing": edit_result.get("oasis_link_missing", False),
+                        "do_not_rules_added": edit_result.get("do_not_rules_added", []),
+                        "current_problem": edit_result.get("current_problem", ""),
+                        "status": "pending",
+                    })
+                except Exception as edit_exc:
+                    targets.append({
+                        "file": file_path,
+                        "section_heading": section_heading,
+                        "current_section": section_text,
+                        "proposed_replacement": "",
+                        "confidence": "Low",
+                        "reasoning": f"Edit generation failed: {edit_exc}",
+                        "status": "failed",
+                    })
+
+            if not targets:
+                supabase_patch(
+                    "apollo_corrections",
+                    row["id"],
+                    {
+                        "status": "failed",
+                        "failure_reason": "All target file edits failed during analysis.",
+                    },
+                )
+                processed += 1
+                continue
+
+            # Determine overall status
+            active_targets = [t for t in targets if t.get("status") != "failed"]
+            any_low_confidence = any(t.get("confidence") == "Low" for t in active_targets)
+            any_oasis_missing = any(t.get("oasis_link_missing") for t in targets)
+            any_edit_failed = any(t.get("status") == "failed" for t in targets)
+            is_multi = len(targets) > 1
+
+            # Multi-file corrections always go to needs_review for human sign-off
+            needs_review = any_low_confidence or any_oasis_missing or any_edit_failed or is_multi
+
+            primary = targets[0]
 
             update = {
                 "status": "needs_review" if needs_review else "analysis_ready",
-                "mode": mode,
-                "target_file": target_file,
-                "target_section_heading": target_heading,
-                "current_section": current_section,
-                "proposed_replacement": proposed_replacement,
+                "mode": "existing",
+                "target_file": primary.get("file"),
+                "target_section_heading": primary.get("section_heading"),
+                "current_section": primary.get("current_section"),
+                "proposed_replacement": primary.get("proposed_replacement"),
+                "targets": targets if is_multi else None,
                 "analysis": {
-                    "llm_reasoning": llm_result.get("reasoning_summary"),
-                    "llm_confidence": confidence,
-                    "current_problem": llm_result.get("current_problem"),
-                    "oasis_link_missing": oasis_link_missing,
-                    "do_not_rules_added": llm_result.get("do_not_rules_added", []),
-                    "new_file_recommended": new_file_recommended,
-                    "new_file_title": llm_result.get("new_file_title"),
-                    "keyword_matches": matches[:5],
-                    "keyword_action": action,
+                    "llm_reasoning": primary.get("reasoning"),
+                    "llm_confidence": primary.get("confidence"),
+                    "current_problem": primary.get("current_problem"),
+                    "oasis_link_missing": any_oasis_missing,
+                    "do_not_rules_added": primary.get("do_not_rules_added", []),
+                    "multi_file": is_multi,
+                    "target_count": len(targets),
                 },
                 "failure_reason": None,
             }
@@ -249,14 +318,34 @@ def apply_approved() -> int:
         },
     )
     applied_rows: list[dict[str, Any]] = []
-    target_files: list[str] = []
+    all_target_files: list[str] = []
 
     for row in rows:
         try:
             supabase_patch("apollo_corrections", row["id"], {"status": "processing", "failure_reason": None})
-            result = logic.approve_update(apply_payload_from_row(row))
-            applied_rows.append(row)
-            target_files.append(result.get("target_file", ""))
+            targets = row.get("targets")
+
+            if targets and isinstance(targets, list) and len(targets) > 1:
+                # Multi-file correction — apply only targets with status "approved"
+                row_files: list[str] = []
+                for target in targets:
+                    if target.get("status") != "approved":
+                        continue
+                    target_payload = {
+                        **apply_payload_from_row(row),
+                        "target_file": target["file"],
+                        "section_heading": target.get("section_heading", ""),
+                        "replacement_text": target.get("proposed_replacement", ""),
+                    }
+                    result = logic.approve_update(target_payload)
+                    row_files.append(result.get("target_file", ""))
+                applied_rows.append(row)
+                all_target_files.extend(row_files)
+            else:
+                # Single-file correction — existing behavior
+                result = logic.approve_update(apply_payload_from_row(row))
+                applied_rows.append(row)
+                all_target_files.append(result.get("target_file", ""))
         except Exception as exc:
             supabase_patch(
                 "apollo_corrections",
@@ -271,7 +360,7 @@ def apply_approved() -> int:
         return 0
 
     try:
-        commit_sha, commit_url = commit_applied_files(target_files)
+        commit_sha, commit_url = commit_applied_files(all_target_files)
     except Exception as exc:
         for row in applied_rows:
             supabase_patch(

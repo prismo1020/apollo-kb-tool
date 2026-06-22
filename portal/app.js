@@ -8,6 +8,7 @@ const state = {
   corrections: [],
   selectedId: null,
   mode: "existing",
+  pendingMultiTargets: null,
 };
 
 const els = {
@@ -311,6 +312,20 @@ function renderDetail() {
     els.reasoningBlock.style.display = "none";
   }
 
+  // Multi-target vs single-target diff
+  const targets = item.targets;
+  const isMultiTarget = Array.isArray(targets) && targets.length > 1;
+  const singleTargetArea = document.getElementById("singleTargetArea");
+  const multiTargetArea = document.getElementById("multiTargetArea");
+  if (singleTargetArea) singleTargetArea.classList.toggle("hidden", isMultiTarget);
+  if (multiTargetArea) multiTargetArea.classList.toggle("hidden", !isMultiTarget);
+  if (isMultiTarget) {
+    renderTargetCards(targets);
+    els.openConfirm.textContent = `Approve Files →`;
+  } else {
+    els.openConfirm.textContent = `Approve Update →`;
+  }
+
   // Reject note row — show when reviewing, hide when already rejected
   const isRejected = item.status === "rejected";
   els.rejectNoteRow.classList.toggle("hidden", isRejected);
@@ -336,6 +351,110 @@ function renderDetail() {
   els.openConfirm.classList.toggle("hidden", isRejected || isApplied);
   els.rejectBtn.disabled = !canReject;
   els.saveDraft.disabled = isRejected || isApplied;
+}
+
+// ── MULTI-TARGET REVIEW ───────────────────────────────────────────────────
+
+function renderTargetCards(targets) {
+  const container = document.getElementById("targetCardList");
+  const countEl = document.getElementById("multiTargetCount");
+  if (!container) return;
+  if (countEl) countEl.textContent = `${targets.length} files`;
+
+  container.innerHTML = targets.map((t, i) => {
+    const conf = t.confidence || "Low";
+    const confClass = conf === "High" ? "applied" : conf === "Medium" ? "approved" : "needs_review";
+    const isIncluded = t.status !== "skipped";
+    const fname = (t.file || "").replace(/.*\//, "");
+    return `
+      <div class="target-card" data-index="${i}">
+        <div class="target-card-header">
+          <label class="target-include-label">
+            <input type="checkbox" class="target-checkbox" data-index="${i}" ${isIncluded ? "checked" : ""} />
+            <span class="target-filename">${escapeHtml(fname)}</span>
+          </label>
+          <span class="status-chip ${confClass}">${escapeHtml(conf)}</span>
+        </div>
+        ${t.section_heading ? `<div class="target-section-name">${escapeHtml(t.section_heading)}</div>` : ""}
+        ${t.reasoning ? `<div class="target-reasoning">${escapeHtml(t.reasoning)}</div>` : ""}
+        <details class="target-diff-toggle">
+          <summary>View / edit diff</summary>
+          <div class="diff-grid" style="margin-top:10px">
+            <div class="field">
+              <span class="label" style="display:block;margin-bottom:4px">Current</span>
+              <pre class="diff-box readonly-diff">${escapeHtml(t.current_section || "(no content)")}</pre>
+            </div>
+            <div class="field">
+              <span class="label" style="display:block;margin-bottom:4px">Proposed — edit if needed</span>
+              <textarea class="diff-box editable-diff" data-target-index="${i}" rows="10">${escapeHtml(t.proposed_replacement || "")}</textarea>
+            </div>
+          </div>
+        </details>
+      </div>
+    `;
+  }).join("");
+
+  updateMultiTargetApproveCount(targets);
+
+  container.querySelectorAll(".target-checkbox").forEach((cb) => {
+    cb.addEventListener("change", () => updateMultiTargetApproveCount(targets));
+  });
+}
+
+function updateMultiTargetApproveCount(targets) {
+  const checked = document.querySelectorAll(".target-checkbox:checked").length;
+  if (els.openConfirm) {
+    els.openConfirm.textContent = `Approve ${checked} of ${targets.length} Files →`;
+    els.openConfirm.disabled = checked === 0;
+  }
+}
+
+async function saveMultiTargetApproval(updatedTargets) {
+  const item = selectedCorrection();
+  if (!item) return;
+  setSync("Saving");
+  const { error } = await supabaseClient
+    .from("apollo_corrections")
+    .update({ targets: updatedTargets, status: "approved" })
+    .eq("id", item.id);
+  if (error) throw error;
+  setSync("Ready", true);
+  const count = updatedTargets.filter((t) => t.status === "approved").length;
+  showToast(`${count} file${count > 1 ? "s" : ""} approved — automation will apply shortly.`, "success");
+  await loadCorrections();
+}
+
+// ── PATCH NOTES ───────────────────────────────────────────────────────────
+
+async function downloadPatchNotes() {
+  const btn = document.getElementById("patchNotesBtn");
+  if (btn) { btn.disabled = true; btn.textContent = "Generating…"; }
+  try {
+    const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const { data, error } = await supabaseClient
+      .from("apollo_corrections")
+      .select("*")
+      .eq("status", "applied")
+      .gte("applied_at", since)
+      .order("applied_at", { ascending: true });
+    if (error) throw error;
+    if (!data || data.length === 0) {
+      showToast("No corrections applied in the last 7 days.");
+      return;
+    }
+    const { data: fnData, error: fnError } = await supabaseClient.functions.invoke("generate-patch-notes", {
+      body: { corrections: data },
+    });
+    if (fnError) throw fnError;
+    if (!fnData || !fnData.ok) throw new Error((fnData && fnData.error) || "Patch notes generation failed.");
+    const date = new Date().toISOString().slice(0, 10);
+    triggerDownload(fnData.patch_notes || "", `Apollo_Patch_Notes_${date}.txt`);
+    showToast("Patch notes downloaded!", "success");
+  } catch (err) {
+    showToast(`Patch notes error: ${err.message}`);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "Download Patch Notes (Last 7 Days)"; }
+  }
 }
 
 // ── LOAD ──────────────────────────────────────────────────────────────────
@@ -403,18 +522,44 @@ async function saveSelected(statusOverride = null) {
 function openConfirm() {
   const item = selectedCorrection();
   if (!item) return;
-  if (!els.proposedReplacement.value.trim()) {
-    showToast("Add proposed replacement guidance before approving.");
-    return;
+
+  const targets = item.targets;
+  const isMultiTarget = Array.isArray(targets) && targets.length > 1;
+
+  if (isMultiTarget) {
+    // Build updated targets from current checkbox + textarea state
+    const updatedTargets = targets.map((t, i) => {
+      const checkbox = document.querySelector(`.target-checkbox[data-index="${i}"]`);
+      const textarea = document.querySelector(`[data-target-index="${i}"]`);
+      return {
+        ...t,
+        proposed_replacement: textarea ? textarea.value.trim() : t.proposed_replacement,
+        status: checkbox && checkbox.checked ? "approved" : "skipped",
+      };
+    });
+    const approvedCount = updatedTargets.filter((t) => t.status === "approved").length;
+    if (approvedCount === 0) {
+      showToast("Select at least one file to approve.");
+      return;
+    }
+    state.pendingMultiTargets = updatedTargets;
+    els.confirmText.textContent = `This will queue ${approvedCount} file update${approvedCount > 1 ? "s" : ""}. GitHub Actions will apply all changes in one commit.`;
+  } else {
+    if (!els.proposedReplacement.value.trim()) {
+      showToast("Add proposed replacement guidance before approving.");
+      return;
+    }
+    if (state.mode === "existing" && (!els.targetFile.value.trim() || !els.targetSection.value.trim())) {
+      showToast("Existing file updates need a target file and section heading.");
+      return;
+    }
+    state.pendingMultiTargets = null;
+    const target = state.mode === "new"
+      ? "a new KB file"
+      : `${els.targetFile.value.trim()} — ${els.targetSection.value.trim()}`;
+    els.confirmText.textContent = `This will mark the correction approved. GitHub Actions will update ${target} and commit the changed KB file.`;
   }
-  if (state.mode === "existing" && (!els.targetFile.value.trim() || !els.targetSection.value.trim())) {
-    showToast("Existing file updates need a target file and section heading.");
-    return;
-  }
-  const target = state.mode === "new"
-    ? "a new KB file"
-    : `${els.targetFile.value.trim()} — ${els.targetSection.value.trim()}`;
-  els.confirmText.textContent = `This will mark the correction approved. GitHub Actions will update ${target} and commit the changed KB file.`;
+
   els.reviewedCheck.checked = false;
   els.confirmApprove.disabled = true;
   els.confirmLayer.classList.remove("hidden");
@@ -715,9 +860,15 @@ els.openConfirm.addEventListener("click", openConfirm);
 els.cancelConfirm.addEventListener("click", () => els.confirmLayer.classList.add("hidden"));
 els.reviewedCheck.addEventListener("change", () => { els.confirmApprove.disabled = !els.reviewedCheck.checked; });
 els.confirmApprove.addEventListener("click", () => {
-  saveSelected("approved")
-    .then(() => els.confirmLayer.classList.add("hidden"))
-    .catch((error) => showToast(error.message));
+  if (state.pendingMultiTargets) {
+    saveMultiTargetApproval(state.pendingMultiTargets)
+      .then(() => { state.pendingMultiTargets = null; els.confirmLayer.classList.add("hidden"); })
+      .catch((error) => showToast(error.message));
+  } else {
+    saveSelected("approved")
+      .then(() => els.confirmLayer.classList.add("hidden"))
+      .catch((error) => showToast(error.message));
+  }
 });
 els.rejectBtn.addEventListener("click", () => rejectSelected().catch((error) => showToast(error.message)));
 els.resubmitBtn.addEventListener("click", resubmitSelected);
@@ -725,6 +876,7 @@ els.copyForChatbase.addEventListener("click", () => copyForChatbase().catch((err
 els.downloadFile.addEventListener("click", () => downloadUpdatedFile().catch((err) => showToast(err.message)));
 document.getElementById("downloadKBZip").addEventListener("click", () => downloadKBZip().catch((err) => showToast(err.message)));
 document.getElementById("downloadKBMerged").addEventListener("click", () => downloadKBMerged().catch((err) => showToast(err.message)));
+document.getElementById("patchNotesBtn").addEventListener("click", () => downloadPatchNotes().catch((err) => showToast(err.message)));
 
 // ── LAST EDITED DATE ──────────────────────────────────────────────────────
 
