@@ -271,7 +271,13 @@
                   <button class="decision" id="modeNew" type="button">Create new file</button>
                 </div>
 
-                <div class="field-row">
+                <!-- New file banner — only visible in new-file mode -->
+                <div class="alert-banner new-file-banner hidden" id="newFileBanner" style="background:var(--trigger-light);border-color:var(--trigger);color:var(--text-primary);flex-direction:column;align-items:flex-start;gap:6px">
+                  <strong style="font-size:12px;text-transform:uppercase;letter-spacing:0.08em;color:var(--trigger)">Creating a new KB file</strong>
+                  <span style="font-size:13px;font-weight:400">Fill in the two fields below. The <strong>Target File</strong> and <strong>Section Heading</strong> above are ignored — they only apply when updating an existing file.</span>
+                </div>
+
+                <div class="field-row" id="existingFileFields">
                   <label class="field">
                     <span>Target file</span>
                     <input id="targetFile" type="text" />
@@ -282,15 +288,28 @@
                   </label>
                 </div>
 
+                <!-- Dimmed overlay version shown in new-file mode -->
+                <div class="field-row new-fields-ignored hidden" id="existingFileFieldsGhost">
+                  <label class="field">
+                    <span style="color:var(--text-muted)">Target file <span class="ignored-badge">ignored</span></span>
+                    <input type="text" disabled style="opacity:0.4;background:var(--surface)" />
+                  </label>
+                  <label class="field">
+                    <span style="color:var(--text-muted)">Section heading <span class="ignored-badge">ignored</span></span>
+                    <input type="text" disabled style="opacity:0.4;background:var(--surface)" />
+                  </label>
+                </div>
+
                 <div class="field-row new-fields">
                   <label class="field">
                     <span>New file topic <span style="color:var(--danger)">*</span></span>
-                    <input id="newTopic" type="text" placeholder="e.g. FAN VERIFICATION MIRROR ROOM" />
-                    <span class="field-hint">Required — becomes the filename. Use ALL CAPS, describe the topic clearly.</span>
+                    <input id="newTopic" type="text" placeholder="e.g. SPC RACK SPACING HOLODECK" />
+                    <span class="field-hint">Required — becomes the filename. Describe the topic in ALL CAPS.</span>
+                    <span class="filename-preview" id="filenamePreview"></span>
                   </label>
                   <label class="field">
                     <span>New file purpose</span>
-                    <input id="newPurpose" type="text" placeholder="e.g. Guidance for testing mirror room fans" />
+                    <input id="newPurpose" type="text" placeholder="e.g. Physical spacing requirements for SPC server racks" />
                   </label>
                 </div>
 

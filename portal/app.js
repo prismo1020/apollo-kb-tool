@@ -364,6 +364,28 @@ function setMode(mode) {
   els.modeExisting.classList.toggle("active", mode === "existing");
   els.modeNew.classList.toggle("active", mode === "new");
   document.querySelector(".new-fields").classList.toggle("hidden", mode !== "new");
+
+  const isNew = mode === "new";
+  document.getElementById("newFileBanner").classList.toggle("hidden", !isNew);
+  document.getElementById("existingFileFields").classList.toggle("hidden", isNew);
+  document.getElementById("existingFileFieldsGhost").classList.toggle("hidden", !isNew);
+  updateFilenamePreview();
+}
+
+function updateFilenamePreview() {
+  if (state.mode !== "new") return;
+  const topic = els.newTopic.value.trim().toUpperCase();
+  const category = (els.category?.value || "").trim().toUpperCase() || "TECH";
+  const slug = topic.replace(/[^A-Z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 60);
+  const el = document.getElementById("filenamePreview");
+  if (!el) return;
+  if (slug) {
+    el.textContent = `→ Will be saved as: _???_${category}__${slug}.docx`;
+    el.classList.add("has-preview");
+  } else {
+    el.textContent = "";
+    el.classList.remove("has-preview");
+  }
 }
 
 function renderDetail() {
@@ -996,6 +1018,7 @@ els.refreshQueue.addEventListener("click", () => loadCorrections().catch((error)
 els.statusFilter.addEventListener("change", () => loadCorrections().catch((error) => showToast(error.message)));
 els.modeExisting.addEventListener("click", () => setMode("existing"));
 els.modeNew.addEventListener("click", () => setMode("new"));
+els.newTopic.addEventListener("input", updateFilenamePreview);
 els.saveDraft.addEventListener("click", () => saveSelected().catch((error) => showToast(error.message)));
 els.openConfirm.addEventListener("click", openConfirm);
 els.cancelConfirm.addEventListener("click", () => els.confirmLayer.classList.add("hidden"));

@@ -966,6 +966,36 @@ input:focus, select:focus, textarea:focus {
   box-shadow: 0 0 0 3px var(--trigger-light);
 }
 
+/* ── NEW FILE MODE ── */
+
+.ignored-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  background: var(--phaser);
+  color: var(--borg);
+  border-radius: 4px;
+  padding: 1px 6px;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+.filename-preview {
+  display: none;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--trigger);
+  margin-top: 6px;
+  font-family: monospace;
+  letter-spacing: 0.01em;
+}
+
+.filename-preview.has-preview { display: block; }
+
+.new-file-banner { display: flex; }
+
 /* ── CHATBASE SYNC ── */
 
 .activity-sync-row {
