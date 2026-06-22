@@ -233,24 +233,33 @@ function renderQueue() {
 
 // ── ACTIVITY ──────────────────────────────────────────────────────────────
 
-function renderActivity() {
-  const relevant = state.corrections.filter((item) =>
-    ["applied", "failed", "processing", "rejected"].includes(item.status)
-  );
-  if (!relevant.length) {
+async function loadActivity() {
+  const { data, error } = await supabaseClient
+    .from("apollo_corrections")
+    .select("id,status,updated_at,target_file,question,github_commit_url,failure_reason,proposed_replacement")
+    .in("status", ["applied", "failed", "rejected", "processing"])
+    .order("updated_at", { ascending: false })
+    .limit(50);
+  if (error) throw error;
+  renderActivity(data || []);
+}
+
+function renderActivity(items) {
+  if (!items.length) {
     els.activityList.innerHTML = '<div class="recent-item muted">No activity yet.</div>';
     return;
   }
-  els.activityList.innerHTML = relevant
+  els.activityList.innerHTML = items
     .map((item) => `
       <div class="recent-item">
         <span class="recent-time">${escapeHtml(new Date(item.updated_at).toLocaleString())}</span>
         <strong>${escapeHtml(item.target_file || shortText(item.question, "No target file"))}</strong>
-        <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
+        <div style="display:flex;align-items:center;gap:8px;margin-top:6px">
           <span class="status-chip ${escapeHtml(item.status)}">${escapeHtml(statusLabel(item.status))}</span>
           ${item.github_commit_url ? `<a href="${escapeHtml(item.github_commit_url)}" target="_blank" rel="noreferrer" class="commit-link" style="font-size:12px">View Commit →</a>` : ""}
         </div>
-        ${item.failure_reason ? `<span style="font-size:12px;color:var(--danger);margin-top:4px;display:block">${escapeHtml(item.failure_reason)}</span>` : ""}
+        ${item.failure_reason && item.status !== "rejected" ? `<span style="font-size:12px;color:var(--danger);margin-top:4px;display:block">${escapeHtml(item.failure_reason)}</span>` : ""}
+        ${item.status === "rejected" && item.failure_reason ? `<span style="font-size:12px;color:var(--text-muted);margin-top:4px;display:block">Rejection reason: ${escapeHtml(item.failure_reason)}</span>` : ""}
       </div>
     `)
     .join("");
@@ -343,7 +352,6 @@ async function loadCorrections() {
   if (error) throw error;
   state.corrections = data || [];
   renderQueue();
-  renderActivity();
   setSync("Ready", true);
 }
 
@@ -451,21 +459,18 @@ function resubmitSelected() {
 
 async function copyForChatbase() {
   const item = selectedCorrection();
-  if (!item || !item.target_file) {
-    showToast("No target file found for this correction.");
+  const text = (item?.proposed_replacement || "").trim();
+  if (!text) {
+    showToast("No proposed replacement text found for this correction.");
     return;
   }
   els.copyForChatbase.disabled = true;
-  els.copyForChatbase.textContent = "Fetching…";
+  els.copyForChatbase.textContent = "Copying…";
   try {
-    const url = `${GITHUB_RAW_BASE}${item.target_file}`;
-    const response = await fetch(url);
-    if (!response.ok) throw new Error(`GitHub returned ${response.status}`);
-    const text = await response.text();
     await navigator.clipboard.writeText(text);
-    showToast(`Copied ${item.target_file} to clipboard — paste into Chatbase.`, "success");
+    showToast("Copied updated KB section to clipboard — paste into Chatbase.", "success");
   } catch (err) {
-    showToast(`Could not copy file: ${err.message}`);
+    showToast(`Could not copy to clipboard: ${err.message}`);
   } finally {
     els.copyForChatbase.disabled = false;
     els.copyForChatbase.textContent = "Copy for Chatbase";
@@ -474,39 +479,33 @@ async function copyForChatbase() {
 
 // ── DOWNLOAD FILE ─────────────────────────────────────────────────────────
 
-async function downloadUpdatedFile() {
+function downloadUpdatedFile() {
   const item = selectedCorrection();
-  if (!item || !item.target_file) {
-    showToast("No target file found for this correction.");
+  const text = (item?.proposed_replacement || "").trim();
+  if (!text) {
+    showToast("No proposed replacement text found for this correction.");
     return;
   }
-  els.downloadFile.disabled = true;
-  els.downloadFile.textContent = "Downloading…";
-  try {
-    const url = `${GITHUB_RAW_BASE}${item.target_file}`;
-    const response = await fetch(url);
-    if (!response.ok) throw new Error(`GitHub returned ${response.status}`);
-    const text = await response.text();
-    const filename = item.target_file.split("/").pop().replace(/\.docx$/i, ".txt");
-    const blob = new Blob([text], { type: "text/plain" });
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = filename;
-    link.click();
-    URL.revokeObjectURL(link.href);
-    showToast(`Downloaded ${filename}.`, "success");
-  } catch (err) {
-    showToast(`Could not download file: ${err.message}`);
-  } finally {
-    els.downloadFile.disabled = false;
-    els.downloadFile.textContent = "Download File";
-  }
+  const baseName = (item.target_file || "kb_correction").split("/").pop().replace(/\.docx$/i, "");
+  const filename = `${baseName}_updated.txt`;
+  const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(link.href);
+  showToast(`Downloaded ${filename}.`, "success");
 }
 
 // ── EVENT LISTENERS ───────────────────────────────────────────────────────
 
 document.querySelectorAll(".nav-item").forEach((button) => {
-  button.addEventListener("click", () => switchToView(button.dataset.view));
+  button.addEventListener("click", () => {
+    switchToView(button.dataset.view);
+    if (button.dataset.view === "activity") {
+      loadActivity().catch((err) => showToast(err.message));
+    }
+  });
 });
 
 els.form.addEventListener("submit", async (event) => {
@@ -560,7 +559,7 @@ els.confirmApprove.addEventListener("click", () => {
 els.rejectBtn.addEventListener("click", () => rejectSelected().catch((error) => showToast(error.message)));
 els.resubmitBtn.addEventListener("click", resubmitSelected);
 els.copyForChatbase.addEventListener("click", () => copyForChatbase().catch((error) => showToast(error.message)));
-els.downloadFile.addEventListener("click", () => downloadUpdatedFile().catch((error) => showToast(error.message)));
+els.downloadFile.addEventListener("click", () => downloadUpdatedFile());
 
 // ── INIT ──────────────────────────────────────────────────────────────────
 
