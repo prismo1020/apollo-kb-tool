@@ -726,9 +726,29 @@ els.downloadFile.addEventListener("click", () => downloadUpdatedFile().catch((er
 document.getElementById("downloadKBZip").addEventListener("click", () => downloadKBZip().catch((err) => showToast(err.message)));
 document.getElementById("downloadKBMerged").addEventListener("click", () => downloadKBMerged().catch((err) => showToast(err.message)));
 
+// ── LAST EDITED DATE ──────────────────────────────────────────────────────
+
+async function loadLastEdited() {
+  try {
+    const response = await fetch(
+      "https://api.github.com/repos/prismo1020/apollo-kb-tool/commits/main?per_page=1"
+    );
+    if (!response.ok) return;
+    const data = await response.json();
+    const date = new Date(data.commit?.committer?.date || data.commit?.author?.date);
+    if (isNaN(date)) return;
+    const formatted = date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    const el = document.getElementById("lastEditedLabel");
+    if (el) el.textContent = `Last edited by Danielle Beram · ${formatted}`;
+  } catch {
+    // silently fail — label stays as static text
+  }
+}
+
 // ── INIT ──────────────────────────────────────────────────────────────────
 
 renderBatch();
+loadLastEdited();
 loadCorrections().catch((error) => {
   setSync("Needs attention");
   showToast(error.message);
