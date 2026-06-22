@@ -459,18 +459,24 @@ function resubmitSelected() {
 
 async function copyForChatbase() {
   const item = selectedCorrection();
-  const text = (item?.proposed_replacement || "").trim();
-  if (!text) {
-    showToast("No proposed replacement text found for this correction.");
+  if (!item?.target_file) {
+    showToast("No target file found for this correction.");
     return;
   }
   els.copyForChatbase.disabled = true;
-  els.copyForChatbase.textContent = "Copying…";
+  els.copyForChatbase.textContent = "Fetching file…";
   try {
+    const url = `${GITHUB_RAW_BASE}${item.target_file}`;
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`GitHub returned ${response.status}`);
+    const arrayBuffer = await response.arrayBuffer();
+    const result = await mammoth.extractRawText({ arrayBuffer });
+    const text = result.value.trim();
+    if (!text) throw new Error("Extracted text was empty — file may not be readable.");
     await navigator.clipboard.writeText(text);
-    showToast("Copied updated KB section to clipboard — paste into Chatbase.", "success");
+    showToast(`Copied full file (${item.target_file.split("/").pop()}) to clipboard — paste into Chatbase.`, "success");
   } catch (err) {
-    showToast(`Could not copy to clipboard: ${err.message}`);
+    showToast(`Could not copy file: ${err.message}`);
   } finally {
     els.copyForChatbase.disabled = false;
     els.copyForChatbase.textContent = "Copy for Chatbase";
