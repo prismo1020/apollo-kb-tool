@@ -483,24 +483,181 @@ async function copyForChatbase() {
   }
 }
 
-// ── DOWNLOAD FILE ─────────────────────────────────────────────────────────
+// ── DOWNLOAD FILE (single correction's full source file) ──────────────────
 
-function downloadUpdatedFile() {
+async function downloadUpdatedFile() {
   const item = selectedCorrection();
-  const text = (item?.proposed_replacement || "").trim();
-  if (!text) {
-    showToast("No proposed replacement text found for this correction.");
+  if (!item?.target_file) {
+    showToast("No target file found for this correction.");
     return;
   }
-  const baseName = (item.target_file || "kb_correction").split("/").pop().replace(/\.docx$/i, "");
-  const filename = `${baseName}_updated.txt`;
+  els.downloadFile.disabled = true;
+  els.downloadFile.textContent = "Fetching file…";
+  try {
+    const url = `${GITHUB_RAW_BASE}${item.target_file}`;
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`GitHub returned ${response.status}`);
+    const arrayBuffer = await response.arrayBuffer();
+    const result = await mammoth.extractRawText({ arrayBuffer });
+    const text = result.value.trim();
+    if (!text) throw new Error("Extracted text was empty.");
+    const filename = item.target_file.split("/").pop().replace(/\.docx$/i, ".txt");
+    triggerDownload(text, filename);
+    showToast(`Downloaded ${filename}.`, "success");
+  } catch (err) {
+    showToast(`Download failed: ${err.message}`);
+  } finally {
+    els.downloadFile.disabled = false;
+    els.downloadFile.textContent = "Download File";
+  }
+}
+
+// ── KB EXPORT HELPERS ─────────────────────────────────────────────────────
+
+function triggerDownload(text, filename) {
   const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
   const link = document.createElement("a");
   link.href = URL.createObjectURL(blob);
   link.download = filename;
   link.click();
   URL.revokeObjectURL(link.href);
-  showToast(`Downloaded ${filename}.`, "success");
+}
+
+function triggerBlobDownload(blob, filename) {
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(link.href);
+}
+
+function setExportProgress(current, total, label) {
+  const el = document.getElementById("exportProgress");
+  const fill = document.getElementById("exportProgressFill");
+  const lbl = document.getElementById("exportProgressLabel");
+  if (!el) return;
+  el.classList.toggle("hidden", total === 0);
+  if (total > 0) {
+    fill.style.width = `${Math.round((current / total) * 100)}%`;
+    lbl.textContent = label;
+  }
+}
+
+async function getKBFileList() {
+  const response = await fetch(
+    "https://api.github.com/repos/prismo1020/apollo-kb-tool/git/trees/main?recursive=1"
+  );
+  if (!response.ok) throw new Error(`GitHub API returned ${response.status}`);
+  const data = await response.json();
+  return data.tree
+    .filter((f) =>
+      f.type === "blob" &&
+      f.path.endsWith(".docx") &&
+      !f.path.includes("/") &&
+      !f.path.startsWith("~$")
+    )
+    .map((f) => f.path)
+    .sort();
+}
+
+async function fetchExtractBatch(paths, batchSize, onProgress) {
+  const results = [];
+  for (let i = 0; i < paths.length; i += batchSize) {
+    const batch = paths.slice(i, i + batchSize);
+    const batchResults = await Promise.all(
+      batch.map(async (path) => {
+        try {
+          const url = `${GITHUB_RAW_BASE}${path}`;
+          const resp = await fetch(url);
+          if (!resp.ok) return { path, text: null, error: `HTTP ${resp.status}` };
+          const arrayBuffer = await resp.arrayBuffer();
+          const extracted = await mammoth.extractRawText({ arrayBuffer });
+          return { path, text: extracted.value.trim(), error: null };
+        } catch (err) {
+          return { path, text: null, error: err.message };
+        }
+      })
+    );
+    results.push(...batchResults);
+    onProgress(results.length, paths.length);
+  }
+  return results;
+}
+
+// ── DOWNLOAD FULL KB AS ZIP ───────────────────────────────────────────────
+
+async function downloadKBZip() {
+  const btn = document.getElementById("downloadKBZip");
+  btn.disabled = true;
+  btn.textContent = "Preparing…";
+  try {
+    setExportProgress(0, 1, "Fetching file list from GitHub…");
+    const files = await getKBFileList();
+    const zip = new JSZip();
+    const folder = zip.folder("Apollo_KB");
+    const results = await fetchExtractBatch(files, 8, (done, total) => {
+      setExportProgress(done, total, `Extracting ${done} of ${total} files…`);
+    });
+
+    let extracted = 0;
+    let failed = 0;
+    for (const { path, text, error } of results) {
+      const name = path.replace(/\.docx$/i, ".txt");
+      if (text) {
+        folder.file(name, text);
+        extracted++;
+      } else {
+        folder.file(name + ".ERROR.txt", `Could not extract: ${error}`);
+        failed++;
+      }
+    }
+
+    setExportProgress(1, 1, "Building ZIP…");
+    const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE" });
+    const date = new Date().toISOString().slice(0, 10);
+    triggerBlobDownload(blob, `Apollo_KB_${date}.zip`);
+    setExportProgress(0, 0, "");
+    showToast(`Downloaded ZIP with ${extracted} KB files${failed ? ` (${failed} failed)` : ""}.`, "success");
+  } catch (err) {
+    setExportProgress(0, 0, "");
+    showToast(`ZIP export failed: ${err.message}`);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Download Full KB (ZIP)";
+  }
+}
+
+// ── DOWNLOAD MERGED KB (single .txt) ─────────────────────────────────────
+
+async function downloadKBMerged() {
+  const btn = document.getElementById("downloadKBMerged");
+  btn.disabled = true;
+  btn.textContent = "Preparing…";
+  try {
+    setExportProgress(0, 1, "Fetching file list from GitHub…");
+    const files = await getKBFileList();
+    const results = await fetchExtractBatch(files, 8, (done, total) => {
+      setExportProgress(done, total, `Extracting ${done} of ${total} files…`);
+    });
+
+    const divider = "=".repeat(80);
+    const sections = results
+      .filter(({ text }) => text)
+      .map(({ path, text }) => `${divider}\nFILE: ${path}\n${divider}\n\n${text}`);
+
+    const merged = sections.join("\n\n\n");
+    const date = new Date().toISOString().slice(0, 10);
+    triggerDownload(merged, `Apollo_KB_Merged_${date}.txt`);
+    setExportProgress(0, 0, "");
+    const failed = results.filter((r) => !r.text).length;
+    showToast(`Downloaded merged KB (${sections.length} files${failed ? `, ${failed} failed` : ""}).`, "success");
+  } catch (err) {
+    setExportProgress(0, 0, "");
+    showToast(`Merged export failed: ${err.message}`);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Download Merged KB (single file)";
+  }
 }
 
 // ── EVENT LISTENERS ───────────────────────────────────────────────────────
@@ -565,7 +722,9 @@ els.confirmApprove.addEventListener("click", () => {
 els.rejectBtn.addEventListener("click", () => rejectSelected().catch((error) => showToast(error.message)));
 els.resubmitBtn.addEventListener("click", resubmitSelected);
 els.copyForChatbase.addEventListener("click", () => copyForChatbase().catch((error) => showToast(error.message)));
-els.downloadFile.addEventListener("click", () => downloadUpdatedFile());
+els.downloadFile.addEventListener("click", () => downloadUpdatedFile().catch((err) => showToast(err.message)));
+document.getElementById("downloadKBZip").addEventListener("click", () => downloadKBZip().catch((err) => showToast(err.message)));
+document.getElementById("downloadKBMerged").addEventListener("click", () => downloadKBMerged().catch((err) => showToast(err.message)));
 
 // ── INIT ──────────────────────────────────────────────────────────────────
 

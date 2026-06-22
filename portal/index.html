@@ -293,6 +293,27 @@
 
         <!-- ── ACTIVITY VIEW ── -->
         <section class="view" id="activityView">
+
+          <section class="panel" style="margin-bottom:20px">
+            <div class="section-title">
+              <h2>Export Full Knowledge Base</h2>
+              <span class="rule"></span>
+            </div>
+            <p style="font-size:13px;color:var(--text-secondary);margin-bottom:16px;line-height:1.6">
+              Downloads the updated KB files directly from the repo — these are the versions with all approved corrections applied.
+            </p>
+            <div class="button-row" style="margin-bottom:14px">
+              <button class="button primary" id="downloadKBZip" type="button">Download Full KB (ZIP)</button>
+              <button class="button secondary" id="downloadKBMerged" type="button">Download Merged KB (single file)</button>
+            </div>
+            <div id="exportProgress" class="hidden">
+              <div class="export-progress-bar-track">
+                <div class="export-progress-bar-fill" id="exportProgressFill"></div>
+              </div>
+              <p id="exportProgressLabel" style="font-size:12px;color:var(--text-secondary);margin-top:6px"></p>
+            </div>
+          </section>
+
           <section class="activity-band">
             <div class="section-title compact">
               <h2>Recent Updates</h2>
@@ -300,6 +321,7 @@
             </div>
             <div id="activityList" class="recent-list"></div>
           </section>
+
         </section>
 
       </main>
@@ -327,6 +349,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/mammoth@1/mammoth.browser.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3/dist/jszip.min.js"></script>
     <script src="./config.js"></script>
     <script src="./app.js"></script>
   </body>
