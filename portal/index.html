@@ -177,22 +177,30 @@
               </div>
 
               <div class="guide-section">
-                <div class="guide-section-label">Updating Chatbase — file by file</div>
-                <ul class="guide-tips">
-                  <li>In the Review Queue, find an <span class="inline-chip applied">applied</span> correction and click <strong>Copy for Chatbase</strong>. This copies the full updated KB file text to your clipboard.</li>
-                  <li>Go to <a href="https://www.chatbase.co/dashboard/kenneth-nguyens-workspace/chatbot/BrVzc5S6s2jNu5RTcT5kx/sources/files" target="_blank" rel="noreferrer" class="guide-link">Chatbase → Sources → Files</a>.</li>
-                  <li>Search for the file using its number — e.g. type <code>_70_</code> to find file 70.</li>
-                  <li>Delete the old file, upload the new one, then click <strong>Retrain</strong>.</li>
-                  <li>Do this in batches for consistency — update all your corrections before retraining.</li>
-                </ul>
+                <div class="guide-section-label">Pushing Updates to Chatbase — The Full Flow</div>
+                <p style="font-size:13px;color:var(--text-secondary);margin-bottom:10px;line-height:1.6">After approving a correction, follow these four steps to get it live in Apollo:</p>
+                <ol class="guide-steps">
+                  <li>
+                    <strong>Apollo KB Update Tool</strong> — The correction is submitted and analyzed here. Once approved, GitHub automatically rewrites the KB file. The correction flips to <span class="inline-chip applied">applied</span>.
+                  </li>
+                  <li>
+                    <strong>Approve correction or create new file</strong> — In the Review Queue, read the before/after diff, edit if needed, and click <em>Approve Update</em>. If the tool can't find the right file, use <em>Create new file</em> — the new file will be indexed and available for future corrections automatically.
+                  </li>
+                  <li>
+                    <strong>Sync to Google Drive backup</strong> — Once applied, go to the Activity Log and click <strong>Download File</strong> (or Copy for Chatbase) to get the updated file. Upload it to the <a href="https://drive.google.com/drive/folders/1pQG6w3ULaVLISXXyq68X3SB2KkisKO32?usp=drive_link" target="_blank" rel="noreferrer" class="guide-link">Apollo KB Google Drive folder</a>. Check the <strong>Synced to Drive</strong> checkbox in the Activity Log so you know it's backed up.
+                  </li>
+                  <li>
+                    <strong>Download from Drive and replace on Chatbase</strong> — Go to the <a href="https://drive.google.com/drive/folders/1pQG6w3ULaVLISXXyq68X3SB2KkisKO32?usp=drive_link" target="_blank" rel="noreferrer" class="guide-link">Google Drive folder</a>, download the updated file, then go to <a href="https://www.chatbase.co/dashboard/kenneth-nguyens-workspace/chatbot/BrVzc5S6s2jNu5RTcT5kx/sources/files" target="_blank" rel="noreferrer" class="guide-link">Chatbase → Sources → Files</a>. Search for the file by number (e.g. <code>_70_</code>), delete the old version, upload the new one, and click <strong>Retrain</strong>. Check the <strong>Synced to Chatbase</strong> checkbox in the Activity Log when done. Do this in batches for consistency.
+                  </li>
+                </ol>
               </div>
 
               <div class="guide-section">
                 <div class="guide-section-label">Exporting the Full KB</div>
                 <ul class="guide-tips">
                   <li>Go to the <strong>Activity Log</strong> tab to find the export buttons.</li>
-                  <li><strong>Download Full KB (ZIP)</strong> — downloads every KB file as a `.txt`, zipped. Use this to retrain Apollo from scratch, back up the full catalogue, or share the current KB with someone.</li>
-                  <li><strong>Download Merged KB (single file)</strong> — all KB files concatenated into one `.txt`. Perfect for training a Gemini Gem, generating patch notes, or giving a new team member a full picture of what Apollo knows.</li>
+                  <li><strong>Download Full KB (ZIP)</strong> — downloads every KB file as a <code>.txt</code>, zipped. Use this to retrain Apollo from scratch, back up the full catalogue, or share the current KB with someone.</li>
+                  <li><strong>Download Merged KB (single file)</strong> — all KB files concatenated into one <code>.txt</code>. Perfect for training a Gemini Gem, generating patch notes, or giving a new team member a full picture of what Apollo knows.</li>
                   <li>Both exports pull the latest committed versions from GitHub — always up to date with approved corrections.</li>
                 </ul>
               </div>

@@ -237,7 +237,7 @@ function renderQueue() {
 async function loadActivity() {
   const { data, error } = await supabaseClient
     .from("apollo_corrections")
-    .select("id,status,updated_at,applied_at,target_file,question,github_commit_url,failure_reason,chatbase_synced,chatbase_synced_at")
+    .select("id,status,updated_at,applied_at,target_file,question,github_commit_url,failure_reason,chatbase_synced,chatbase_synced_at,gdrive_synced,gdrive_synced_at")
     .in("status", ["applied", "failed", "rejected", "processing"])
     .order("updated_at", { ascending: false })
     .limit(50);
@@ -252,28 +252,41 @@ async function toggleChatbaseSync(id, checked) {
     const update = checked
       ? { chatbase_synced: true, chatbase_synced_at: new Date().toISOString() }
       : { chatbase_synced: false, chatbase_synced_at: null };
-    const { error } = await supabaseClient
-      .from("apollo_corrections")
-      .update(update)
-      .eq("id", id);
+    const { error } = await supabaseClient.from("apollo_corrections").update(update).eq("id", id);
     if (error) throw error;
-    // Update chip without full reload
     const chip = document.querySelector(`.chatbase-sync-chip[data-id="${id}"]`);
     if (chip) {
-      if (checked) {
-        chip.className = "status-chip applied chatbase-sync-chip";
-        chip.dataset.id = id;
-        chip.textContent = "✓ Synced to Chatbase";
-      } else {
-        chip.className = "status-chip chatbase-sync-chip";
-        chip.dataset.id = id;
-        chip.textContent = "Not yet synced";
-      }
+      chip.className = `status-chip ${checked ? "applied" : ""} chatbase-sync-chip`;
+      chip.dataset.id = id;
+      chip.textContent = checked ? "✓ Synced to Chatbase" : "Not synced to Chatbase";
     }
   } catch (err) {
     showToast(`Sync save failed: ${err.message}`);
-    // Revert checkbox
     const cb = document.querySelector(`.chatbase-sync-cb[data-id="${id}"]`);
+    if (cb) cb.checked = !checked;
+  } finally {
+    if (row) row.classList.remove("saving");
+  }
+}
+
+async function toggleGdriveSync(id, checked) {
+  const row = document.querySelector(`.activity-sync-row[data-id="${id}"]`);
+  if (row) row.classList.add("saving");
+  try {
+    const update = checked
+      ? { gdrive_synced: true, gdrive_synced_at: new Date().toISOString() }
+      : { gdrive_synced: false, gdrive_synced_at: null };
+    const { error } = await supabaseClient.from("apollo_corrections").update(update).eq("id", id);
+    if (error) throw error;
+    const chip = document.querySelector(`.gdrive-sync-chip[data-id="${id}"]`);
+    if (chip) {
+      chip.className = `status-chip ${checked ? "applied" : ""} gdrive-sync-chip`;
+      chip.dataset.id = id;
+      chip.textContent = checked ? "✓ Synced to Drive" : "Not synced to Drive";
+    }
+  } catch (err) {
+    showToast(`Sync save failed: ${err.message}`);
+    const cb = document.querySelector(`.gdrive-sync-cb[data-id="${id}"]`);
     if (cb) cb.checked = !checked;
   } finally {
     if (row) row.classList.remove("saving");
@@ -288,9 +301,13 @@ function renderActivity(items) {
   els.activityList.innerHTML = items
     .map((item) => {
       const isApplied = item.status === "applied";
-      const synced = item.chatbase_synced === true;
-      const syncedAt = item.chatbase_synced_at
+      const cbSynced = item.chatbase_synced === true;
+      const cbSyncedAt = item.chatbase_synced_at
         ? new Date(item.chatbase_synced_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+        : null;
+      const gdSynced = item.gdrive_synced === true;
+      const gdSyncedAt = item.gdrive_synced_at
+        ? new Date(item.gdrive_synced_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
         : null;
 
       return `
@@ -299,14 +316,19 @@ function renderActivity(items) {
           <strong>${escapeHtml(item.target_file || shortText(item.question, "No target file"))}</strong>
           <div style="display:flex;align-items:center;gap:8px;margin-top:6px;flex-wrap:wrap">
             <span class="status-chip ${escapeHtml(item.status)}">${escapeHtml(statusLabel(item.status))}</span>
-            <span class="status-chip ${synced ? "applied" : ""} chatbase-sync-chip" data-id="${escapeHtml(item.id)}">${synced ? `✓ Synced to Chatbase${syncedAt ? ` · ${syncedAt}` : ""}` : "Not yet synced"}</span>
+            <span class="status-chip ${gdSynced ? "applied" : ""} gdrive-sync-chip" data-id="${escapeHtml(item.id)}">${gdSynced ? `✓ Synced to Drive${gdSyncedAt ? ` · ${gdSyncedAt}` : ""}` : "Not synced to Drive"}</span>
+            <span class="status-chip ${cbSynced ? "applied" : ""} chatbase-sync-chip" data-id="${escapeHtml(item.id)}">${cbSynced ? `✓ Synced to Chatbase${cbSyncedAt ? ` · ${cbSyncedAt}` : ""}` : "Not synced to Chatbase"}</span>
             ${item.github_commit_url ? `<a href="${escapeHtml(item.github_commit_url)}" target="_blank" rel="noreferrer" class="commit-link" style="font-size:12px">View Commit →</a>` : ""}
           </div>
           ${isApplied ? `
             <div class="activity-sync-row" data-id="${escapeHtml(item.id)}">
               <label class="sync-checkbox-label">
-                <input type="checkbox" class="chatbase-sync-cb" data-id="${escapeHtml(item.id)}" ${synced ? "checked" : ""} />
-                <span>Mark as synced to Chatbase</span>
+                <input type="checkbox" class="gdrive-sync-cb" data-id="${escapeHtml(item.id)}" ${gdSynced ? "checked" : ""} />
+                <span>Synced to Google Drive backup</span>
+              </label>
+              <label class="sync-checkbox-label" style="margin-top:6px">
+                <input type="checkbox" class="chatbase-sync-cb" data-id="${escapeHtml(item.id)}" ${cbSynced ? "checked" : ""} />
+                <span>Synced to Chatbase</span>
               </label>
             </div>
           ` : ""}
@@ -317,7 +339,9 @@ function renderActivity(items) {
     })
     .join("");
 
-  // Wire up checkboxes
+  els.activityList.querySelectorAll(".gdrive-sync-cb").forEach((cb) => {
+    cb.addEventListener("change", () => toggleGdriveSync(cb.dataset.id, cb.checked));
+  });
   els.activityList.querySelectorAll(".chatbase-sync-cb").forEach((cb) => {
     cb.addEventListener("change", () => toggleChatbaseSync(cb.dataset.id, cb.checked));
   });
