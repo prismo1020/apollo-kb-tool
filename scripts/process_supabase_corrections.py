@@ -317,7 +317,8 @@ def apply_approved() -> int:
             "limit": "10",
         },
     )
-    applied_rows: list[dict[str, Any]] = []
+    # Store (row, primary_actual_file) so we can update target_file after commit
+    applied_rows: list[tuple[dict[str, Any], str]] = []
     all_target_files: list[str] = []
 
     for row in rows:
@@ -339,13 +340,15 @@ def apply_approved() -> int:
                     }
                     result = logic.approve_update(target_payload)
                     row_files.append(result.get("target_file", ""))
-                applied_rows.append(row)
+                primary_file = row_files[0] if row_files else row.get("target_file", "")
+                applied_rows.append((row, primary_file))
                 all_target_files.extend(row_files)
             else:
                 # Single-file correction — existing behavior
                 result = logic.approve_update(apply_payload_from_row(row))
-                applied_rows.append(row)
-                all_target_files.append(result.get("target_file", ""))
+                actual_file = result.get("target_file", "") or row.get("target_file", "")
+                applied_rows.append((row, actual_file))
+                all_target_files.append(actual_file)
         except Exception as exc:
             supabase_patch(
                 "apollo_corrections",
@@ -362,7 +365,7 @@ def apply_approved() -> int:
     try:
         commit_sha, commit_url = commit_applied_files(all_target_files)
     except Exception as exc:
-        for row in applied_rows:
+        for row, _ in applied_rows:
             supabase_patch(
                 "apollo_corrections",
                 row["id"],
@@ -373,7 +376,7 @@ def apply_approved() -> int:
             )
         raise
 
-    for row in applied_rows:
+    for row, actual_file in applied_rows:
         supabase_patch(
             "apollo_corrections",
             row["id"],
@@ -382,6 +385,8 @@ def apply_approved() -> int:
                 "applied_at": now_iso(),
                 "github_commit_sha": commit_sha,
                 "github_commit_url": commit_url,
+                # Always write the actual file that was created/updated
+                "target_file": actual_file or row.get("target_file"),
                 "failure_reason": None,
             },
         )

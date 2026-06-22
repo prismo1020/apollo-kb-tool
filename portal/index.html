@@ -284,12 +284,13 @@
 
                 <div class="field-row new-fields">
                   <label class="field">
-                    <span>New file topic</span>
-                    <input id="newTopic" type="text" />
+                    <span>New file topic <span style="color:var(--danger)">*</span></span>
+                    <input id="newTopic" type="text" placeholder="e.g. FAN VERIFICATION MIRROR ROOM" />
+                    <span class="field-hint">Required — becomes the filename. Use ALL CAPS, describe the topic clearly.</span>
                   </label>
                   <label class="field">
                     <span>New file purpose</span>
-                    <input id="newPurpose" type="text" />
+                    <input id="newPurpose" type="text" placeholder="e.g. Guidance for testing mirror room fans" />
                   </label>
                 </div>
 

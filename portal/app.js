@@ -645,8 +645,13 @@ function openConfirm() {
       return;
     }
     state.pendingMultiTargets = null;
+    if (state.mode === "new" && !els.newTopic.value.trim()) {
+      showToast("Add a 'New file topic' before approving — this becomes the filename.");
+      els.newTopic.focus();
+      return;
+    }
     const target = state.mode === "new"
-      ? "a new KB file"
+      ? `a new KB file: ${els.newTopic.value.trim()}`
       : `${els.targetFile.value.trim()} — ${els.targetSection.value.trim()}`;
     els.confirmText.textContent = `This will mark the correction approved. GitHub Actions will update ${target} and commit the changed KB file.`;
   }
