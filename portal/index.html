@@ -182,6 +182,8 @@
                   <option value="approved,processing">Approved / Processing</option>
                   <option value="applied">Applied</option>
                   <option value="failed">Failed</option>
+                  <option value="rejected">Rejected</option>
+                  <option value="submitted,analysis_ready,needs_review,approved,processing,failed,applied,rejected">All</option>
                 </select>
                 <button class="button secondary compact" id="refreshQueue" type="button">Refresh</button>
               </div>
@@ -257,8 +259,30 @@
                   </label>
                 </div>
 
+                <!-- Applied actions -->
+                <div class="applied-actions hidden" id="copyForChatbaseRow">
+                  <div class="alert-banner" style="background:var(--success-light);border-color:var(--success);color:#0a6645;margin-bottom:14px">
+                    ✓ This correction has been applied to the KB.
+                  </div>
+                  <div class="button-row" style="margin-bottom:4px">
+                    <button class="button primary" id="copyForChatbase" type="button">Copy for Chatbase</button>
+                    <button class="button secondary" id="downloadFile" type="button">Download File</button>
+                  </div>
+                  <p style="font-size:11px;color:var(--text-muted);margin-top:6px">Copies the updated KB file text to your clipboard so you can paste it directly into Chatbase.</p>
+                </div>
+
+                <!-- Reject flow -->
+                <div id="rejectNoteRow">
+                  <label class="field" style="margin-top:8px">
+                    <span>Rejection reason <span style="font-weight:400;text-transform:none;letter-spacing:0">(optional)</span></span>
+                    <input id="rejectNote" type="text" placeholder="e.g. Guidance needs Oasis link, wrong section targeted…" />
+                  </label>
+                </div>
+
                 <div class="button-row end">
                   <button class="button quiet" id="saveDraft" type="button">Save Draft</button>
+                  <button class="button danger" id="rejectBtn" type="button">Reject</button>
+                  <button class="button secondary" id="resubmitBtn" type="button" style="display:none">Resubmit with New Info →</button>
                   <button class="button primary" id="openConfirm" type="button">Approve Update →</button>
                 </div>
               </div>

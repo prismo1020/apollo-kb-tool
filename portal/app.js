@@ -1,6 +1,8 @@
 const config = window.APOLLO_CONFIG || {};
 const supabaseClient = window.supabase.createClient(config.supabaseUrl, config.supabaseAnonKey);
 
+const GITHUB_RAW_BASE = "https://raw.githubusercontent.com/prismo1020/apollo-kb-tool/main/";
+
 const state = {
   drafts: [],
   corrections: [],
@@ -14,6 +16,7 @@ const els = {
   question: document.getElementById("question"),
   wrongAnswer: document.getElementById("wrongAnswer"),
   approvedAnswer: document.getElementById("approvedAnswer"),
+  oasisLink: document.getElementById("oasisLink"),
   category: document.getElementById("category"),
   reviewerLabel: document.getElementById("reviewerLabel"),
   reviewerNotes: document.getElementById("reviewerNotes"),
@@ -31,6 +34,9 @@ const els = {
   detailContent: document.getElementById("detailContent"),
   detailStatus: document.getElementById("detailStatus"),
   detailTitle: document.getElementById("detailTitle"),
+  oasisWarning: document.getElementById("oasisWarning"),
+  reasoningBlock: document.getElementById("reasoningBlock"),
+  reasoningText: document.getElementById("reasoningText"),
   modeExisting: document.getElementById("modeExisting"),
   modeNew: document.getElementById("modeNew"),
   targetFile: document.getElementById("targetFile"),
@@ -41,6 +47,12 @@ const els = {
   proposedReplacement: document.getElementById("proposedReplacement"),
   saveDraft: document.getElementById("saveDraft"),
   openConfirm: document.getElementById("openConfirm"),
+  rejectBtn: document.getElementById("rejectBtn"),
+  rejectNote: document.getElementById("rejectNote"),
+  rejectNoteRow: document.getElementById("rejectNoteRow"),
+  resubmitBtn: document.getElementById("resubmitBtn"),
+  copyForChatbase: document.getElementById("copyForChatbase"),
+  downloadFile: document.getElementById("downloadFile"),
   commitLink: document.getElementById("commitLink"),
   activityList: document.getElementById("activityList"),
   confirmLayer: document.getElementById("confirmLayer"),
@@ -51,15 +63,18 @@ const els = {
   toast: document.getElementById("toast"),
 };
 
-function showToast(message) {
+// ── UTILS ──────────────────────────────────────────────────────────────────
+
+function showToast(message, type = "default") {
   els.toast.textContent = message;
-  els.toast.classList.remove("hidden");
+  els.toast.className = `toast toast-${type}`;
   window.clearTimeout(showToast.timer);
   showToast.timer = window.setTimeout(() => els.toast.classList.add("hidden"), 4200);
 }
 
-function setSync(text) {
+function setSync(text, live = false) {
   els.syncState.textContent = text;
+  els.syncState.classList.toggle("live", live);
 }
 
 function escapeHtml(value) {
@@ -77,15 +92,27 @@ function shortText(value, fallback = "Untitled correction") {
   return text.length > 92 ? `${text.slice(0, 89)}...` : text;
 }
 
-function isReviewer() {
-  return true;
+function statusLabel(status) {
+  return String(status || "submitted").replaceAll("_", " ");
 }
+
+function switchToView(viewName) {
+  document.querySelectorAll(".nav-item").forEach((item) => item.classList.remove("active"));
+  document.querySelectorAll(".view").forEach((view) => view.classList.remove("active"));
+  const btn = document.querySelector(`.nav-item[data-view="${viewName}"]`);
+  if (btn) btn.classList.add("active");
+  const view = document.getElementById(`${viewName}View`);
+  if (view) view.classList.add("active");
+}
+
+// ── FORM ──────────────────────────────────────────────────────────────────
 
 function formPayload() {
   return {
     question: els.question.value.trim(),
     wrong_answer: els.wrongAnswer.value.trim(),
     approved_answer: els.approvedAnswer.value.trim(),
+    oasis_link: els.oasisLink.value.trim(),
     category: els.category.value.trim(),
     reviewer_label: els.reviewerLabel.value.trim(),
     reviewer_notes: els.reviewerNotes.value.trim(),
@@ -100,12 +127,15 @@ function clearCorrectionFields(keepMeta = false) {
   els.question.value = "";
   els.wrongAnswer.value = "";
   els.approvedAnswer.value = "";
+  els.oasisLink.value = "";
   els.reviewerNotes.value = "";
   if (!keepMeta) {
     els.category.value = "";
     els.reviewerLabel.value = "";
   }
 }
+
+// ── BATCH ─────────────────────────────────────────────────────────────────
 
 function renderBatch() {
   els.batchCount.textContent = `${state.drafts.length} pending`;
@@ -142,8 +172,8 @@ async function submitPayloads(payloads) {
   setSync("Submitting");
   const { error } = await supabaseClient.from("apollo_corrections").insert(rows);
   if (error) throw error;
-  setSync("Ready");
-  showToast(rows.length === 1 ? "Correction submitted." : `${rows.length} corrections submitted.`);
+  setSync("Ready", true);
+  showToast(rows.length === 1 ? "Correction submitted." : `${rows.length} corrections submitted.`, "success");
   await loadCorrections();
   return true;
 }
@@ -159,9 +189,7 @@ function addToBatch() {
   renderBatch();
 }
 
-function statusLabel(status) {
-  return String(status || "submitted").replaceAll("_", " ");
-}
+// ── QUEUE ─────────────────────────────────────────────────────────────────
 
 function selectedCorrection() {
   return state.corrections.find((item) => item.id === state.selectedId) || null;
@@ -203,22 +231,32 @@ function renderQueue() {
   }
 }
 
+// ── ACTIVITY ──────────────────────────────────────────────────────────────
+
 function renderActivity() {
-  const applied = state.corrections.filter((item) => ["applied", "failed", "processing"].includes(item.status));
-  if (!applied.length) {
-    els.activityList.innerHTML = '<div class="recent-item muted">No applied updates yet.</div>';
+  const relevant = state.corrections.filter((item) =>
+    ["applied", "failed", "processing", "rejected"].includes(item.status)
+  );
+  if (!relevant.length) {
+    els.activityList.innerHTML = '<div class="recent-item muted">No activity yet.</div>';
     return;
   }
-  els.activityList.innerHTML = applied
+  els.activityList.innerHTML = relevant
     .map((item) => `
       <div class="recent-item">
-        <span>${escapeHtml(new Date(item.updated_at).toLocaleString())}</span>
-        <strong>${escapeHtml(item.target_file || "No target file")}</strong>
-        <span>${escapeHtml(statusLabel(item.status))}</span>
+        <span class="recent-time">${escapeHtml(new Date(item.updated_at).toLocaleString())}</span>
+        <strong>${escapeHtml(item.target_file || shortText(item.question, "No target file"))}</strong>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
+          <span class="status-chip ${escapeHtml(item.status)}">${escapeHtml(statusLabel(item.status))}</span>
+          ${item.github_commit_url ? `<a href="${escapeHtml(item.github_commit_url)}" target="_blank" rel="noreferrer" class="commit-link" style="font-size:12px">View Commit →</a>` : ""}
+        </div>
+        ${item.failure_reason ? `<span style="font-size:12px;color:var(--danger);margin-top:4px;display:block">${escapeHtml(item.failure_reason)}</span>` : ""}
       </div>
     `)
     .join("");
 }
+
+// ── DETAIL PANEL ──────────────────────────────────────────────────────────
 
 function setMode(mode) {
   state.mode = mode;
@@ -247,15 +285,51 @@ function renderDetail() {
   els.proposedReplacement.value = item.proposed_replacement || item.approved_answer || "";
   setMode(item.mode || "existing");
 
+  // Commit link
   els.commitLink.classList.toggle("hidden", !item.github_commit_url);
-  if (item.github_commit_url) {
-    els.commitLink.href = item.github_commit_url;
+  if (item.github_commit_url) els.commitLink.href = item.github_commit_url;
+
+  // Oasis warning
+  const oasisMissing = item.analysis?.oasis_link_missing === true;
+  els.oasisWarning.classList.toggle("hidden", !oasisMissing);
+
+  // KB Editor reasoning
+  const reasoning = item.analysis?.llm_reasoning || item.analysis?.reasoning;
+  if (reasoning) {
+    els.reasoningBlock.style.display = "flex";
+    els.reasoningText.textContent = reasoning;
+  } else {
+    els.reasoningBlock.style.display = "none";
   }
 
-  const canApprove = isReviewer() && ["analysis_ready", "needs_review", "failed"].includes(item.status);
+  // Reject note row — show when reviewing, hide when already rejected
+  const isRejected = item.status === "rejected";
+  els.rejectNoteRow.classList.toggle("hidden", isRejected);
+  els.rejectBtn.classList.toggle("hidden", isRejected);
+
+  // Resubmit — only show on rejected items
+  els.resubmitBtn.classList.toggle("hidden", !isRejected);
+  if (isRejected && item.failure_reason) {
+    els.rejectNote.value = item.failure_reason;
+  } else {
+    els.rejectNote.value = "";
+  }
+
+  // Applied actions — download + copy for chatbase
+  const isApplied = item.status === "applied";
+  const appliedRow = document.getElementById("copyForChatbaseRow");
+  if (appliedRow) appliedRow.classList.toggle("hidden", !isApplied);
+
+  // Button states
+  const canApprove = ["analysis_ready", "needs_review", "failed"].includes(item.status);
+  const canReject = ["analysis_ready", "needs_review", "submitted", "failed"].includes(item.status);
   els.openConfirm.disabled = !canApprove;
-  els.saveDraft.disabled = !isReviewer();
+  els.openConfirm.classList.toggle("hidden", isRejected || isApplied);
+  els.rejectBtn.disabled = !canReject;
+  els.saveDraft.disabled = isRejected || isApplied;
 }
+
+// ── LOAD ──────────────────────────────────────────────────────────────────
 
 async function loadCorrections() {
   setSync("Loading");
@@ -270,8 +344,10 @@ async function loadCorrections() {
   state.corrections = data || [];
   renderQueue();
   renderActivity();
-  setSync("Ready");
+  setSync("Ready", true);
 }
+
+// ── AUTOMATION ────────────────────────────────────────────────────────────
 
 async function runAutomationNow() {
   setSync("Triggering");
@@ -281,18 +357,18 @@ async function runAutomationNow() {
       body: { source: "apollo-portal" },
     });
     if (error) throw error;
-    if (data && data.ok === false) {
-      throw new Error(data.error || "Automation trigger failed.");
-    }
+    if (data && data.ok === false) throw new Error(data.error || "Automation trigger failed.");
     setSync("Queued");
-    showToast("KB automation queued. Refresh in a minute or two.");
+    showToast("KB automation queued. Refresh in a minute or two.", "success");
   } finally {
     window.setTimeout(() => {
       els.runAutomation.disabled = false;
-      setSync("Ready");
+      setSync("Ready", true);
     }, 2500);
   }
 }
+
+// ── SAVE / APPROVE ────────────────────────────────────────────────────────
 
 async function saveSelected(statusOverride = null) {
   const item = selectedCorrection();
@@ -311,8 +387,8 @@ async function saveSelected(statusOverride = null) {
   setSync("Saving");
   const { error } = await supabaseClient.from("apollo_corrections").update(update).eq("id", item.id);
   if (error) throw error;
-  setSync("Ready");
-  showToast(statusOverride === "approved" ? "Correction approved." : "Draft saved.");
+  setSync("Ready", true);
+  showToast(statusOverride === "approved" ? "Correction approved — automation will apply it shortly." : "Draft saved.", "success");
   await loadCorrections();
 }
 
@@ -327,26 +403,110 @@ function openConfirm() {
     showToast("Existing file updates need a target file and section heading.");
     return;
   }
-
-  const target = state.mode === "new" ? "a new KB file" : `${els.targetFile.value.trim()} (${els.targetSection.value.trim()})`;
+  const target = state.mode === "new"
+    ? "a new KB file"
+    : `${els.targetFile.value.trim()} — ${els.targetSection.value.trim()}`;
   els.confirmText.textContent = `This will mark the correction approved. GitHub Actions will update ${target} and commit the changed KB file.`;
   els.reviewedCheck.checked = false;
   els.confirmApprove.disabled = true;
   els.confirmLayer.classList.remove("hidden");
 }
 
-async function initializePortal() {
-  renderBatch();
+// ── REJECT ────────────────────────────────────────────────────────────────
+
+async function rejectSelected() {
+  const item = selectedCorrection();
+  if (!item) return;
+  const note = els.rejectNote.value.trim() || "Rejected by reviewer.";
+  setSync("Saving");
+  const { error } = await supabaseClient
+    .from("apollo_corrections")
+    .update({ status: "rejected", failure_reason: note })
+    .eq("id", item.id);
+  if (error) throw error;
+  setSync("Ready", true);
+  showToast("Correction rejected and archived.");
   await loadCorrections();
 }
 
+// ── RESUBMIT ──────────────────────────────────────────────────────────────
+
+function resubmitSelected() {
+  const item = selectedCorrection();
+  if (!item) return;
+  // Pre-fill the submission form with original data
+  els.question.value = item.question || "";
+  els.wrongAnswer.value = item.wrong_answer || "";
+  els.approvedAnswer.value = "";
+  els.oasisLink.value = item.oasis_link || "";
+  els.category.value = item.category || "";
+  els.reviewerNotes.value = `Resubmission of rejected correction (ID: ${item.id}). Original rejection reason: ${item.failure_reason || "none"}`;
+  // Switch to submit tab and focus on approved answer
+  switchToView("submit");
+  els.approvedAnswer.focus();
+  showToast("Form pre-filled from rejected correction — add your updated guidance and resubmit.");
+}
+
+// ── COPY FOR CHATBASE ─────────────────────────────────────────────────────
+
+async function copyForChatbase() {
+  const item = selectedCorrection();
+  if (!item || !item.target_file) {
+    showToast("No target file found for this correction.");
+    return;
+  }
+  els.copyForChatbase.disabled = true;
+  els.copyForChatbase.textContent = "Fetching…";
+  try {
+    const url = `${GITHUB_RAW_BASE}${item.target_file}`;
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`GitHub returned ${response.status}`);
+    const text = await response.text();
+    await navigator.clipboard.writeText(text);
+    showToast(`Copied ${item.target_file} to clipboard — paste into Chatbase.`, "success");
+  } catch (err) {
+    showToast(`Could not copy file: ${err.message}`);
+  } finally {
+    els.copyForChatbase.disabled = false;
+    els.copyForChatbase.textContent = "Copy for Chatbase";
+  }
+}
+
+// ── DOWNLOAD FILE ─────────────────────────────────────────────────────────
+
+async function downloadUpdatedFile() {
+  const item = selectedCorrection();
+  if (!item || !item.target_file) {
+    showToast("No target file found for this correction.");
+    return;
+  }
+  els.downloadFile.disabled = true;
+  els.downloadFile.textContent = "Downloading…";
+  try {
+    const url = `${GITHUB_RAW_BASE}${item.target_file}`;
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`GitHub returned ${response.status}`);
+    const text = await response.text();
+    const filename = item.target_file.split("/").pop().replace(/\.docx$/i, ".txt");
+    const blob = new Blob([text], { type: "text/plain" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(link.href);
+    showToast(`Downloaded ${filename}.`, "success");
+  } catch (err) {
+    showToast(`Could not download file: ${err.message}`);
+  } finally {
+    els.downloadFile.disabled = false;
+    els.downloadFile.textContent = "Download File";
+  }
+}
+
+// ── EVENT LISTENERS ───────────────────────────────────────────────────────
+
 document.querySelectorAll(".nav-item").forEach((button) => {
-  button.addEventListener("click", () => {
-    document.querySelectorAll(".nav-item").forEach((item) => item.classList.remove("active"));
-    document.querySelectorAll(".view").forEach((view) => view.classList.remove("active"));
-    button.classList.add("active");
-    document.getElementById(`${button.dataset.view}View`).classList.add("active");
-  });
+  button.addEventListener("click", () => switchToView(button.dataset.view));
 });
 
 els.form.addEventListener("submit", async (event) => {
@@ -360,7 +520,7 @@ els.form.addEventListener("submit", async (event) => {
     const submitted = await submitPayloads([payload]);
     if (submitted) clearCorrectionFields(true);
   } catch (error) {
-    setSync("Ready");
+    setSync("Ready", true);
     showToast(error.message);
   }
 });
@@ -369,24 +529,18 @@ els.addToBatch.addEventListener("click", addToBatch);
 els.submitBatch.addEventListener("click", async () => {
   try {
     const submitted = await submitPayloads(state.drafts);
-    if (submitted) {
-      state.drafts = [];
-      renderBatch();
-    }
+    if (submitted) { state.drafts = []; renderBatch(); }
   } catch (error) {
-    setSync("Ready");
+    setSync("Ready", true);
     showToast(error.message);
   }
 });
-els.clearBatch.addEventListener("click", () => {
-  state.drafts = [];
-  renderBatch();
-});
+els.clearBatch.addEventListener("click", () => { state.drafts = []; renderBatch(); });
 els.clearForm.addEventListener("click", () => clearCorrectionFields(false));
 els.runAutomation.addEventListener("click", () => {
   runAutomationNow().catch((error) => {
     els.runAutomation.disabled = false;
-    setSync("Ready");
+    setSync("Ready", true);
     showToast(error.message);
   });
 });
@@ -397,19 +551,21 @@ els.modeNew.addEventListener("click", () => setMode("new"));
 els.saveDraft.addEventListener("click", () => saveSelected().catch((error) => showToast(error.message)));
 els.openConfirm.addEventListener("click", openConfirm);
 els.cancelConfirm.addEventListener("click", () => els.confirmLayer.classList.add("hidden"));
-els.reviewedCheck.addEventListener("change", () => {
-  els.confirmApprove.disabled = !els.reviewedCheck.checked;
-});
+els.reviewedCheck.addEventListener("change", () => { els.confirmApprove.disabled = !els.reviewedCheck.checked; });
 els.confirmApprove.addEventListener("click", () => {
   saveSelected("approved")
-    .then(() => {
-      els.confirmLayer.classList.add("hidden");
-    })
+    .then(() => els.confirmLayer.classList.add("hidden"))
     .catch((error) => showToast(error.message));
 });
+els.rejectBtn.addEventListener("click", () => rejectSelected().catch((error) => showToast(error.message)));
+els.resubmitBtn.addEventListener("click", resubmitSelected);
+els.copyForChatbase.addEventListener("click", () => copyForChatbase().catch((error) => showToast(error.message)));
+els.downloadFile.addEventListener("click", () => downloadUpdatedFile().catch((error) => showToast(error.message)));
+
+// ── INIT ──────────────────────────────────────────────────────────────────
 
 renderBatch();
-initializePortal().catch((error) => {
+loadCorrections().catch((error) => {
   setSync("Needs attention");
   showToast(error.message);
 });
