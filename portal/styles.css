@@ -429,9 +429,9 @@ input:focus, select:focus, textarea:focus {
 }
 
 .status-chip.rejected {
-  background: var(--surface);
-  color: var(--text-muted);
-  border-color: var(--border);
+  background: var(--danger-light);
+  color: var(--danger);
+  border-color: var(--danger);
 }
 
 .recent-time {
@@ -721,6 +721,129 @@ input:focus, select:focus, textarea:focus {
 
 .recent-item strong { font-size: 13px; font-weight: 700; }
 .recent-item span { font-size: 12px; color: var(--text-secondary); }
+
+/* ── SIDEBAR LOGO ── */
+
+.sidebar-logo {
+  max-width: 120px;
+  max-height: 36px;
+  object-fit: contain;
+  display: block;
+}
+
+/* ── GUIDE PANEL ── */
+
+.guide-panel {
+  overflow-y: auto;
+  max-height: calc(100vh - 200px);
+}
+
+.guide-intro {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.65;
+  margin-bottom: 20px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.guide-section {
+  margin-bottom: 20px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.guide-section:last-child {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.guide-section-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--trigger);
+  margin-bottom: 10px;
+}
+
+.guide-steps {
+  padding-left: 20px;
+  display: grid;
+  gap: 10px;
+}
+
+.guide-steps li {
+  font-size: 13px;
+  color: var(--text-primary);
+  line-height: 1.6;
+}
+
+.guide-steps li strong { color: var(--text-primary); }
+.guide-steps li em { color: var(--text-secondary); font-style: normal; font-weight: 600; }
+
+.guide-tips {
+  padding-left: 18px;
+  display: grid;
+  gap: 8px;
+}
+
+.guide-tips li {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+
+.guide-tips li strong { color: var(--text-primary); }
+
+.guide-link {
+  color: var(--trigger);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.guide-link:hover { text-decoration: underline; }
+
+.guide-tips code {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 12px;
+  font-family: monospace;
+  color: var(--text-primary);
+}
+
+.inline-chip {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border: 1px solid;
+  vertical-align: middle;
+}
+
+.inline-chip.analysis_ready {
+  background: var(--success-light);
+  color: var(--success);
+  border-color: var(--success);
+}
+
+.inline-chip.needs_review {
+  background: var(--warning-light);
+  color: var(--warning);
+  border-color: var(--warning);
+}
+
+.inline-chip.applied {
+  background: var(--success-light);
+  color: var(--success);
+  border-color: var(--success);
+}
 
 /* ── EXPORT PROGRESS ── */
 
