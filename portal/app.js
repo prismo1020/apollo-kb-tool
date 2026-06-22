@@ -320,8 +320,12 @@ function renderActivity(items) {
             <span class="status-chip ${cbSynced ? "applied" : ""} chatbase-sync-chip" data-id="${escapeHtml(item.id)}">${cbSynced ? `✓ Synced to Chatbase${cbSyncedAt ? ` · ${cbSyncedAt}` : ""}` : "Not synced to Chatbase"}</span>
             ${item.github_commit_url ? `<a href="${escapeHtml(item.github_commit_url)}" target="_blank" rel="noreferrer" class="commit-link" style="font-size:12px">View Commit →</a>` : ""}
           </div>
-          ${isApplied ? `
+          ${isApplied && item.target_file ? `
             <div class="activity-sync-row" data-id="${escapeHtml(item.id)}">
+              <div class="button-row" style="margin-bottom:10px">
+                <button class="button secondary compact activity-dl-btn" data-file="${escapeHtml(item.target_file)}" type="button">Download .txt</button>
+                <button class="button quiet compact activity-copy-btn" data-file="${escapeHtml(item.target_file)}" type="button">Copy for Chatbase</button>
+              </div>
               <label class="sync-checkbox-label">
                 <input type="checkbox" class="gdrive-sync-cb" data-id="${escapeHtml(item.id)}" ${gdSynced ? "checked" : ""} />
                 <span>Synced to Google Drive backup</span>
@@ -344,6 +348,12 @@ function renderActivity(items) {
   });
   els.activityList.querySelectorAll(".chatbase-sync-cb").forEach((cb) => {
     cb.addEventListener("change", () => toggleChatbaseSync(cb.dataset.id, cb.checked));
+  });
+  els.activityList.querySelectorAll(".activity-dl-btn").forEach((btn) => {
+    btn.addEventListener("click", () => downloadFileByPath(btn.dataset.file, btn));
+  });
+  els.activityList.querySelectorAll(".activity-copy-btn").forEach((btn) => {
+    btn.addEventListener("click", () => copyFileByPath(btn.dataset.file, btn));
   });
 }
 
@@ -735,6 +745,51 @@ async function downloadUpdatedFile() {
   } finally {
     els.downloadFile.disabled = false;
     els.downloadFile.textContent = "Download File";
+  }
+}
+
+// ── SINGLE FILE DOWNLOAD / COPY (from Activity tab) ──────────────────────
+
+async function downloadFileByPath(filePath, btn) {
+  const original = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Fetching…";
+  try {
+    const resp = await fetch(`${GITHUB_RAW_BASE}${filePath}`);
+    if (!resp.ok) throw new Error(`GitHub returned ${resp.status}`);
+    const arrayBuffer = await resp.arrayBuffer();
+    const result = await mammoth.extractRawText({ arrayBuffer });
+    const text = result.value.trim();
+    if (!text) throw new Error("File appears empty.");
+    const filename = filePath.split("/").pop().replace(/\.docx$/i, ".txt");
+    triggerDownload(text, filename);
+    showToast(`Downloaded ${filename}.`, "success");
+  } catch (err) {
+    showToast(`Download failed: ${err.message}`);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = original;
+  }
+}
+
+async function copyFileByPath(filePath, btn) {
+  const original = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Copying…";
+  try {
+    const resp = await fetch(`${GITHUB_RAW_BASE}${filePath}`);
+    if (!resp.ok) throw new Error(`GitHub returned ${resp.status}`);
+    const arrayBuffer = await resp.arrayBuffer();
+    const result = await mammoth.extractRawText({ arrayBuffer });
+    const text = result.value.trim();
+    if (!text) throw new Error("File appears empty.");
+    await navigator.clipboard.writeText(text);
+    showToast(`Copied ${filePath.split("/").pop()} to clipboard.`, "success");
+  } catch (err) {
+    showToast(`Copy failed: ${err.message}`);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = original;
   }
 }
 
