@@ -237,12 +237,47 @@ function renderQueue() {
 async function loadActivity() {
   const { data, error } = await supabaseClient
     .from("apollo_corrections")
-    .select("id,status,updated_at,target_file,question,github_commit_url,failure_reason,proposed_replacement")
+    .select("id,status,updated_at,applied_at,target_file,question,github_commit_url,failure_reason,chatbase_synced,chatbase_synced_at")
     .in("status", ["applied", "failed", "rejected", "processing"])
     .order("updated_at", { ascending: false })
     .limit(50);
   if (error) throw error;
   renderActivity(data || []);
+}
+
+async function toggleChatbaseSync(id, checked) {
+  const row = document.querySelector(`.activity-sync-row[data-id="${id}"]`);
+  if (row) row.classList.add("saving");
+  try {
+    const update = checked
+      ? { chatbase_synced: true, chatbase_synced_at: new Date().toISOString() }
+      : { chatbase_synced: false, chatbase_synced_at: null };
+    const { error } = await supabaseClient
+      .from("apollo_corrections")
+      .update(update)
+      .eq("id", id);
+    if (error) throw error;
+    // Update chip without full reload
+    const chip = document.querySelector(`.chatbase-sync-chip[data-id="${id}"]`);
+    if (chip) {
+      if (checked) {
+        chip.className = "status-chip applied chatbase-sync-chip";
+        chip.dataset.id = id;
+        chip.textContent = "✓ Synced to Chatbase";
+      } else {
+        chip.className = "status-chip chatbase-sync-chip";
+        chip.dataset.id = id;
+        chip.textContent = "Not yet synced";
+      }
+    }
+  } catch (err) {
+    showToast(`Sync save failed: ${err.message}`);
+    // Revert checkbox
+    const cb = document.querySelector(`.chatbase-sync-cb[data-id="${id}"]`);
+    if (cb) cb.checked = !checked;
+  } finally {
+    if (row) row.classList.remove("saving");
+  }
 }
 
 function renderActivity(items) {
@@ -251,19 +286,41 @@ function renderActivity(items) {
     return;
   }
   els.activityList.innerHTML = items
-    .map((item) => `
-      <div class="recent-item">
-        <span class="recent-time">${escapeHtml(new Date(item.updated_at).toLocaleString())}</span>
-        <strong>${escapeHtml(item.target_file || shortText(item.question, "No target file"))}</strong>
-        <div style="display:flex;align-items:center;gap:8px;margin-top:6px">
-          <span class="status-chip ${escapeHtml(item.status)}">${escapeHtml(statusLabel(item.status))}</span>
-          ${item.github_commit_url ? `<a href="${escapeHtml(item.github_commit_url)}" target="_blank" rel="noreferrer" class="commit-link" style="font-size:12px">View Commit →</a>` : ""}
+    .map((item) => {
+      const isApplied = item.status === "applied";
+      const synced = item.chatbase_synced === true;
+      const syncedAt = item.chatbase_synced_at
+        ? new Date(item.chatbase_synced_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+        : null;
+
+      return `
+        <div class="recent-item">
+          <span class="recent-time">${escapeHtml(new Date(item.updated_at).toLocaleString())}</span>
+          <strong>${escapeHtml(item.target_file || shortText(item.question, "No target file"))}</strong>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:6px;flex-wrap:wrap">
+            <span class="status-chip ${escapeHtml(item.status)}">${escapeHtml(statusLabel(item.status))}</span>
+            <span class="status-chip ${synced ? "applied" : ""} chatbase-sync-chip" data-id="${escapeHtml(item.id)}">${synced ? `✓ Synced to Chatbase${syncedAt ? ` · ${syncedAt}` : ""}` : "Not yet synced"}</span>
+            ${item.github_commit_url ? `<a href="${escapeHtml(item.github_commit_url)}" target="_blank" rel="noreferrer" class="commit-link" style="font-size:12px">View Commit →</a>` : ""}
+          </div>
+          ${isApplied ? `
+            <div class="activity-sync-row" data-id="${escapeHtml(item.id)}">
+              <label class="sync-checkbox-label">
+                <input type="checkbox" class="chatbase-sync-cb" data-id="${escapeHtml(item.id)}" ${synced ? "checked" : ""} />
+                <span>Mark as synced to Chatbase</span>
+              </label>
+            </div>
+          ` : ""}
+          ${item.failure_reason && item.status !== "rejected" ? `<span style="font-size:12px;color:var(--danger);margin-top:4px;display:block">${escapeHtml(item.failure_reason)}</span>` : ""}
+          ${item.status === "rejected" && item.failure_reason ? `<span style="font-size:12px;color:var(--text-muted);margin-top:4px;display:block">Rejection reason: ${escapeHtml(item.failure_reason)}</span>` : ""}
         </div>
-        ${item.failure_reason && item.status !== "rejected" ? `<span style="font-size:12px;color:var(--danger);margin-top:4px;display:block">${escapeHtml(item.failure_reason)}</span>` : ""}
-        ${item.status === "rejected" && item.failure_reason ? `<span style="font-size:12px;color:var(--text-muted);margin-top:4px;display:block">Rejection reason: ${escapeHtml(item.failure_reason)}</span>` : ""}
-      </div>
-    `)
+      `;
+    })
     .join("");
+
+  // Wire up checkboxes
+  els.activityList.querySelectorAll(".chatbase-sync-cb").forEach((cb) => {
+    cb.addEventListener("change", () => toggleChatbaseSync(cb.dataset.id, cb.checked));
+  });
 }
 
 // ── DETAIL PANEL ──────────────────────────────────────────────────────────

@@ -966,6 +966,37 @@ input:focus, select:focus, textarea:focus {
   box-shadow: 0 0 0 3px var(--trigger-light);
 }
 
+/* ── CHATBASE SYNC ── */
+
+.activity-sync-row {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-light);
+  transition: opacity 0.15s;
+}
+
+.activity-sync-row.saving { opacity: 0.5; pointer-events: none; }
+
+.sync-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  user-select: none;
+}
+
+.sync-checkbox-label input[type="checkbox"] {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--trigger);
+  cursor: pointer;
+}
+
+.sync-checkbox-label:has(input:checked) { color: var(--success); }
+
 /* ── RESPONSIVE ── */
 
 @media (max-width: 1024px) {
