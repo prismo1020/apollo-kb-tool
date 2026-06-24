@@ -21,6 +21,7 @@ def llm_edit_section(
     candidate_file: str,
     candidate_heading: str,
     current_section_text: str,
+    is_source: bool = False,
 ) -> dict[str, Any]:
     """Call the Chatbase KB Editor bot and return parsed JSON proposal."""
     api_key = os.environ.get("CHATBASE_API_KEY", "")
@@ -31,7 +32,8 @@ def llm_edit_section(
         raise RuntimeError("CHATBASE_KB_EDITOR_BOT_ID environment variable is not set.")
 
     user_message = _build_user_message(
-        payload, candidate_file, candidate_heading, current_section_text
+        payload, candidate_file, candidate_heading, current_section_text,
+        is_source=is_source,
     )
 
     response = requests.post(
@@ -90,7 +92,7 @@ def llm_identify_files(
         f"Correct guidance: {payload.get('correct_answer', '').strip()}\n"
         f"Category: {payload.get('category', '').strip()}\n"
         f"Reviewer notes: {payload.get('notes', '').strip()}\n\n"
-        f"KB FILE INDEX (filename : section headings):\n{kb_index}"
+        f"KB DATA:\n{kb_index}"
     )
 
     response = requests.post(
@@ -125,6 +127,7 @@ def _build_user_message(
     candidate_file: str,
     candidate_heading: str,
     current_section_text: str,
+    is_source: bool = False,
 ) -> str:
     parts = [
         f"QUESTION ASKED BY STAFF:\n{payload.get('question', '').strip()}",
@@ -139,6 +142,22 @@ def _build_user_message(
         parts.append(f"OASIS SOP LINK FOR THIS TOPIC: {oasis_link}")
     else:
         parts.append("OASIS SOP LINK: (not provided — flag oasis_link_missing: true if required)")
+
+    # Tell the editor whether this file is the source of the error or a related file
+    if is_source:
+        parts.append(
+            "EDIT TYPE: CORRECTION\n"
+            "This file was identified as the SOURCE of the wrong answer Apollo gave. "
+            "Find the SPECIFIC wrong statement in the section text below and correct it directly. "
+            "Do not just add new information — locate and fix the incorrect text."
+        )
+    else:
+        parts.append(
+            "EDIT TYPE: UPDATE\n"
+            "This file is related to the topic but may not contain the specific error. "
+            "Add or reinforce the correct guidance where appropriate."
+        )
+
     if candidate_file:
         parts.append(f"MATCHED KB FILE: {candidate_file}")
     if candidate_heading:

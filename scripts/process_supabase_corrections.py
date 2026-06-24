@@ -99,15 +99,82 @@ def payload_from_row(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def build_kb_index() -> str:
-    """Build a compact filename:headings index of every KB file for the File Identifier bot."""
-    records = logic.load_index()
-    lines = []
-    for record in records:
+def find_error_sources(
+    payload: dict[str, Any],
+    all_records: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Search all KB content for files that likely CONTAIN the wrong answer Apollo gave.
+
+    Returns a list of {file, section_heading, section_text, overlap_score} dicts
+    sorted by how well the wrong-answer tokens match the section content.
+    """
+    wrong_answer = payload.get("wrong_answer", "")
+    if not wrong_answer.strip():
+        return []
+
+    wrong_tokens = set(logic.tokenize(wrong_answer))
+    if not wrong_tokens:
+        return []
+
+    threshold = max(2, int(len(wrong_tokens) * 0.35))
+    hits: list[dict[str, Any]] = []
+
+    for record in all_records:
+        file_overlap = wrong_tokens & record["token_set"]
+        if len(file_overlap) < threshold:
+            continue
+
+        for section in record.get("sections", []):
+            sec_overlap = wrong_tokens & section["token_set"]
+            if len(sec_overlap) < threshold:
+                continue
+            hits.append({
+                "file": record["file"],
+                "section_heading": section["heading"],
+                "section_text": section["text"],
+                "overlap_score": len(sec_overlap) / len(wrong_tokens),
+            })
+
+    hits.sort(key=lambda h: h["overlap_score"], reverse=True)
+    return hits[:8]
+
+
+def build_kb_index_with_sources(
+    payload: dict[str, Any],
+    all_records: list[dict[str, Any]],
+) -> tuple[str, set[str]]:
+    """Build the File Identifier input: source sections with full text + compact index.
+
+    Returns (index_string, source_file_paths_set).
+    Source files are those whose content best matches the wrong answer text.
+    """
+    sources = find_error_sources(payload, all_records)
+    source_files: set[str] = {s["file"] for s in sources}
+
+    lines: list[str] = []
+
+    if sources:
+        lines.append("=== LIKELY ERROR SOURCES ===")
+        lines.append("These files contain text that closely matches what Apollo said incorrectly.")
+        lines.append("These MUST be corrected — find the specific wrong statement and fix it.")
+        lines.append("")
+        for hit in sources:
+            lines.append(f"FILE: {hit['file']}")
+            lines.append(f"SECTION: {hit['section_heading']}")
+            lines.append(f"CONTENT:\n{hit['section_text'][:2000]}")
+            lines.append("")
+        lines.append("=" * 60)
+        lines.append("")
+
+    lines.append("=== FULL KB INDEX (all files — section headings only) ===")
+    lines.append("Use this to identify any ADDITIONAL files that also need updating.")
+    lines.append("")
+    for record in all_records:
         headings = [s["heading"] for s in record.get("sections", [])]
         heading_str = ", ".join(headings[:6]) if headings else "(no sections)"
         lines.append(f"{record['file']} : {heading_str}")
-    return "\n".join(lines)
+
+    return "\n".join(lines), source_files
 
 
 def analyze_submitted() -> int:
@@ -123,8 +190,6 @@ def analyze_submitted() -> int:
     if not rows:
         return 0
 
-    # Build KB index once for the entire batch — expensive to rebuild per row
-    kb_index = build_kb_index()
     all_records = logic.load_index()
     records_by_file = {r["file"]: r for r in all_records}
 
@@ -133,15 +198,22 @@ def analyze_submitted() -> int:
         try:
             payload = payload_from_row(row)
 
+            # Build rich index: source sections with full text + compact index for all files
+            kb_index, source_files = build_kb_index_with_sources(payload, all_records)
+
             # Phase 1: identify all files affected by this correction
             try:
                 affected_file_paths = llm_identify_files(payload, kb_index)
             except Exception as identify_exc:
-                # Fall back to keyword matching if file identifier fails
                 print(f"File identifier failed, falling back to keyword matching: {identify_exc}")
                 matches = logic.find_matches(payload)
                 top = matches[0] if matches else {}
                 affected_file_paths = [top["file"]] if top else []
+
+            # Always include detected source files even if the bot missed them
+            for src in source_files:
+                if src not in affected_file_paths:
+                    affected_file_paths.insert(0, src)
 
             # Filter to files that actually exist in our index
             affected_file_paths = [f for f in affected_file_paths if f in records_by_file][:15]
@@ -176,8 +248,12 @@ def analyze_submitted() -> int:
                 section_heading = section["heading"] if section else ""
                 section_text = section["text"] if section else ""
 
+                is_source = file_path in source_files
                 try:
-                    edit_result = llm_edit_section(payload, file_path, section_heading, section_text)
+                    edit_result = llm_edit_section(
+                        payload, file_path, section_heading, section_text,
+                        is_source=is_source,
+                    )
                     targets.append({
                         "file": file_path,
                         "section_heading": edit_result.get("target_section_heading") or section_heading,
@@ -188,6 +264,7 @@ def analyze_submitted() -> int:
                         "oasis_link_missing": edit_result.get("oasis_link_missing", False),
                         "do_not_rules_added": edit_result.get("do_not_rules_added", []),
                         "current_problem": edit_result.get("current_problem", ""),
+                        "is_source": is_source,
                         "status": "pending",
                     })
                 except Exception as edit_exc:
@@ -302,6 +379,7 @@ def commit_applied_files(target_files: list[str]) -> tuple[str, str] | tuple[Non
         return None, None
 
     run_git(["commit", "-m", "Apply Apollo KB corrections"])
+    run_git(["pull", "--rebase", "origin", "main"])
     run_git(["push"])
     sha = run_git(["rev-parse", "HEAD"]).stdout.strip()
     return sha, f"https://github.com/{GITHUB_REPOSITORY}/commit/{sha}"
