@@ -198,10 +198,18 @@ def is_safe_kb_path(path: Path) -> bool:
     return True
 
 
+# Files that are meta/reference documents, not regular KB files — excluded from indexing
+KB_EXCLUDE = {
+    "Apollo_Master_Verification_Reference_Organized.docx",
+}
+
+
 def collect_docx_files() -> list[Path]:
     files: list[Path] = []
     for path in KB_ROOT.rglob("*.docx"):
         if path.name.startswith("~$"):
+            continue
+        if path.name in KB_EXCLUDE:
             continue
         if is_safe_kb_path(path):
             files.append(path)
