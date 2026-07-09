@@ -85,6 +85,8 @@ def llm_identify_files(
     if not bot_id:
         raise RuntimeError("CHATBASE_FILE_IDENTIFIER_BOT_ID environment variable is not set.")
 
+    # Cap total kb_index size to avoid Chatbase 400 payload errors
+    kb_index_capped = kb_index[:40000] if len(kb_index) > 40000 else kb_index
     user_message = (
         f"CORRECTION:\n"
         f"Question: {payload.get('question', '').strip()}\n"
@@ -92,7 +94,7 @@ def llm_identify_files(
         f"Correct guidance: {payload.get('correct_answer', '').strip()}\n"
         f"Category: {payload.get('category', '').strip()}\n"
         f"Reviewer notes: {payload.get('notes', '').strip()}\n\n"
-        f"KB DATA:\n{kb_index}"
+        f"KB DATA:\n{kb_index_capped}"
     )
 
     response = requests.post(
@@ -163,7 +165,11 @@ def _build_user_message(
     if candidate_heading:
         parts.append(f"MATCHED SECTION HEADING: {candidate_heading}")
     if current_section_text:
-        parts.append(f"CURRENT SECTION TEXT:\n{current_section_text}")
+        # Cap section text to avoid Chatbase 400 payload errors on large files
+        truncated = current_section_text[:3000]
+        if len(current_section_text) > 3000:
+            truncated += "\n[...truncated for length...]"
+        parts.append(f"CURRENT SECTION TEXT:\n{truncated}")
     else:
         parts.append("CURRENT SECTION TEXT: (none — this may be a new topic)")
     new_topic = (payload.get("new_topic") or "").strip()
