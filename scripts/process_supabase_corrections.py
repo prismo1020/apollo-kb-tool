@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import re
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -479,6 +480,21 @@ def create_file_docx(target_path: Path, content: str) -> None:
     doc.save(str(target_path))
 
 
+def renumber_new_file(stored_filename: str) -> str:
+    """Assign the next available file number to a new KB file at apply time.
+
+    File numbers are picked during analysis, before any file exists on disk, so
+    two new files created in the same batch can both claim the same number. We
+    recompute the number here — after each write we re-scan the repo — so a batch
+    of new files gets sequential numbers instead of colliding.
+    """
+    name = Path(stored_filename).name
+    match = re.match(r"_?\d+[_-](.*)$", name)
+    remainder = match.group(1) if match else name
+    number = logic.next_file_number()
+    return f"_{number:02d}_{remainder}"
+
+
 def run_git(args: list[str], check: bool = True) -> subprocess.CompletedProcess[str]:
     result = subprocess.run(
         ["git", *args],
@@ -536,10 +552,13 @@ def apply_approved() -> int:
             targets = row.get("targets")
 
             if row.get("request_type") == "file_creation":
-                # New KB file — write the generated content to a fresh .docx
-                filename = Path((row.get("target_file") or "").strip()).name
-                if not filename.lower().endswith(".docx"):
+                # New KB file — assign the next available number now (at write
+                # time) so a batch of new files gets sequential numbers instead
+                # of colliding on the number picked during analysis.
+                stored = Path((row.get("target_file") or "").strip()).name
+                if not stored.lower().endswith(".docx"):
                     raise ValueError("File creation request has no valid target filename.")
+                filename = renumber_new_file(stored)
                 target_path = (REPO_ROOT / filename).resolve()
                 if REPO_ROOT not in target_path.parents:
                     raise ValueError("Unsafe file path for new KB file.")
