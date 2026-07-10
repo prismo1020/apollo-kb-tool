@@ -25,13 +25,13 @@ def llm_edit_section(
 ) -> dict[str, Any]:
     """Call the Chatbase KB Editor bot and return parsed JSON proposal."""
     api_key = os.environ.get("CHATBASE_API_KEY", "")
-    bot_id = os.environ.get("CHATBASE_KB_EDITOR_BOT_ID", "")
+    bot_id = os.environ.get("CHATBASE_APOLLO_BOT_ID", "")
     if not api_key:
         raise RuntimeError("CHATBASE_API_KEY environment variable is not set.")
     if not bot_id:
-        raise RuntimeError("CHATBASE_KB_EDITOR_BOT_ID environment variable is not set.")
+        raise RuntimeError("CHATBASE_APOLLO_BOT_ID environment variable is not set.")
 
-    user_message = _build_user_message(
+    user_message = _build_kb_editor_message(
         payload, candidate_file, candidate_heading, current_section_text,
         is_source=is_source,
     )
@@ -77,17 +77,18 @@ def llm_identify_files(
     payload: dict[str, Any],
     kb_index: str,
 ) -> list[str]:
-    """Phase 1: ask the File Identifier bot which files are affected by this correction."""
+    """Phase 1: ask the File Identifier role which files are affected by this correction."""
     api_key = os.environ.get("CHATBASE_API_KEY", "")
-    bot_id = os.environ.get("CHATBASE_FILE_IDENTIFIER_BOT_ID", "")
+    bot_id = os.environ.get("CHATBASE_APOLLO_BOT_ID", "")
     if not api_key:
         raise RuntimeError("CHATBASE_API_KEY environment variable is not set.")
     if not bot_id:
-        raise RuntimeError("CHATBASE_FILE_IDENTIFIER_BOT_ID environment variable is not set.")
+        raise RuntimeError("CHATBASE_APOLLO_BOT_ID environment variable is not set.")
 
     # Cap total kb_index size to avoid Chatbase 400 payload errors
     kb_index_capped = kb_index[:40000] if len(kb_index) > 40000 else kb_index
     user_message = (
+        f"ROLE: FILE_IDENTIFIER\n\n"
         f"CORRECTION:\n"
         f"Question: {payload.get('question', '').strip()}\n"
         f"Wrong answer Apollo gave: {payload.get('wrong_answer', '').strip()}\n"
@@ -131,22 +132,23 @@ def llm_create_kb_file(
     oasis_link: str,
     related_files_block: str,
 ) -> dict[str, Any]:
-    """Ask the KB File Creator bot to write a comprehensive new KB file.
+    """Ask the KB File Creator role to write a comprehensive new KB file.
 
     related_files_block: a string of "FILE: name\nCONTENT:\n<text>" blocks for
     auto-detected related files, so the bot can stay consistent and cross-reference.
     Returns dict with topic_slug, content, cross_references, confidence, reasoning.
     """
     api_key = os.environ.get("CHATBASE_API_KEY", "")
-    bot_id = os.environ.get("CHATBASE_KB_FILE_CREATOR_BOT_ID", "")
+    bot_id = os.environ.get("CHATBASE_APOLLO_BOT_ID", "")
     if not api_key:
         raise RuntimeError("CHATBASE_API_KEY environment variable is not set.")
     if not bot_id:
-        raise RuntimeError("CHATBASE_KB_FILE_CREATOR_BOT_ID environment variable is not set.")
+        raise RuntimeError("CHATBASE_APOLLO_BOT_ID environment variable is not set.")
 
     # Cap related content to avoid Chatbase 400 payload errors
     related_capped = related_files_block[:45000] if len(related_files_block) > 45000 else related_files_block
     user_message = (
+        f"ROLE: KB_FILE_CREATOR\n\n"
         f"TOPIC: {topic.strip()}\n"
         f"CATEGORY: {category.strip() or 'CORRECTION'}\n"
         f"DESCRIPTION: {description.strip()}\n"
@@ -189,7 +191,7 @@ def llm_create_kb_file(
     return result
 
 
-def _build_user_message(
+def _build_kb_editor_message(
     payload: dict[str, Any],
     candidate_file: str,
     candidate_heading: str,
@@ -197,6 +199,7 @@ def _build_user_message(
     is_source: bool = False,
 ) -> str:
     parts = [
+        "ROLE: KB_EDITOR",
         f"QUESTION ASKED BY STAFF:\n{payload.get('question', '').strip()}",
         f"WRONG ANSWER APOLLO GAVE:\n{payload.get('wrong_answer', '').strip()}",
         f"APPROVED CORRECT GUIDANCE:\n{payload.get('correct_answer', '').strip()}",
@@ -244,3 +247,54 @@ def _build_user_message(
     if new_purpose:
         parts.append(f"SUGGESTED PURPOSE: {new_purpose}")
     return "\n\n".join(parts)
+
+
+def llm_write_patch_notes(
+    corrections_data: str,
+) -> str:
+    """Ask the Patch Notes Writer role to summarize applied corrections as release notes.
+
+    corrections_data: a formatted string containing:
+    - KB File Name
+    - Applied date
+    - Reasoning or description
+    - Original question (if available)
+
+    Returns the patch notes as plain text.
+    """
+    api_key = os.environ.get("CHATBASE_API_KEY", "")
+    bot_id = os.environ.get("CHATBASE_APOLLO_BOT_ID", "")
+    if not api_key:
+        raise RuntimeError("CHATBASE_API_KEY environment variable is not set.")
+    if not bot_id:
+        raise RuntimeError("CHATBASE_APOLLO_BOT_ID environment variable is not set.")
+
+    user_message = (
+        f"ROLE: PATCH_NOTES_WRITER\n\n"
+        f"{corrections_data}"
+    )
+
+    response = requests.post(
+        CHATBASE_CHAT_URL,
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+        json={
+            "chatbotId": bot_id,
+            "messages": [{"role": "user", "content": user_message}],
+            "stream": False,
+        },
+        timeout=REQUEST_TIMEOUT,
+    )
+    response.raise_for_status()
+
+    raw = response.json().get("text", "").strip()
+    if raw.startswith("```"):
+        lines = raw.splitlines()
+        raw = "\n".join(line for line in lines if not line.startswith("```")).strip()
+
+    if not raw:
+        raise ValueError("Patch Notes Writer returned empty response.")
+
+    return raw
