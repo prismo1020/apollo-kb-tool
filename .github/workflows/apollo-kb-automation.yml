@@ -32,5 +32,6 @@ jobs:
           CHATBASE_API_KEY: ${{ secrets.CHATBASE_API_KEY }}
           CHATBASE_KB_EDITOR_BOT_ID: ${{ secrets.CHATBASE_KB_EDITOR_BOT_ID }}
           CHATBASE_FILE_IDENTIFIER_BOT_ID: ${{ secrets.CHATBASE_FILE_IDENTIFIER_BOT_ID }}
+          CHATBASE_KB_FILE_CREATOR_BOT_ID: ${{ secrets.CHATBASE_KB_FILE_CREATOR_BOT_ID }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: python scripts/process_supabase_corrections.py
