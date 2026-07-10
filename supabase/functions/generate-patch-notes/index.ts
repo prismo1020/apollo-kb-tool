@@ -14,13 +14,13 @@ Deno.serve(async (request) => {
   }
 
   const chatbaseApiKey = Deno.env.get("CHATBASE_API_KEY");
-  const patchNotesBotId = Deno.env.get("CHATBASE_PATCH_NOTES_BOT_ID");
+  const apolloBotId = Deno.env.get("CHATBASE_APOLLO_BOT_ID");
 
   if (!chatbaseApiKey) {
     return json({ ok: false, error: "Missing CHATBASE_API_KEY secret." }, 500);
   }
-  if (!patchNotesBotId) {
-    return json({ ok: false, error: "Missing CHATBASE_PATCH_NOTES_BOT_ID secret." }, 500);
+  if (!apolloBotId) {
+    return json({ ok: false, error: "Missing CHATBASE_APOLLO_BOT_ID secret." }, 500);
   }
 
   const body = await request.json();
@@ -39,7 +39,7 @@ Deno.serve(async (request) => {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      chatbotId: patchNotesBotId,
+      chatbotId: apolloBotId,
       messages: [{ role: "user", content: userMessage }],
       stream: false,
     }),
@@ -62,6 +62,8 @@ Deno.serve(async (request) => {
 function buildPatchNotesMessage(corrections: Array<Record<string, unknown>>): string {
   const dateRange = getDateRange(corrections);
   const lines = [
+    `ROLE: PATCH_NOTES_WRITER`,
+    ``,
     `Generate patch notes for the following ${corrections.length} correction${corrections.length === 1 ? "" : "s"} applied to the Apollo Knowledge Base.`,
     `Date range: ${dateRange}`,
     ``,
