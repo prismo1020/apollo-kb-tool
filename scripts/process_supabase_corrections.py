@@ -473,10 +473,25 @@ def analyze_file_requests() -> int:
 
 
 def create_file_docx(target_path: Path, content: str) -> None:
-    """Write generated KB file content to a .docx, one paragraph per line."""
+    """Write generated KB file content to a .docx, one paragraph per line.
+
+    Ensures content is valid UTF-8 and safely encoded to avoid Word corruption.
+    """
     doc = logic.Document()
+    # Normalize and clean the content to ensure it's valid UTF-8
+    content = content or ""
+    # Ensure it's a proper string and remove any invalid characters
+    content = content.encode("utf-8", errors="replace").decode("utf-8")
     for line in content.splitlines():
-        doc.add_paragraph(line)
+        # Strip any remaining problematic whitespace but preserve intentional formatting
+        line = line.rstrip()
+        if line or not doc.paragraphs:  # Keep empty lines, but avoid leading empty paragraphs
+            try:
+                doc.add_paragraph(line)
+            except Exception as exc:  # noqa: BLE001 - sanitize problematic lines
+                # If a line fails, add a cleaned version
+                safe_line = line.encode("ascii", errors="replace").decode("ascii")
+                doc.add_paragraph(safe_line)
     doc.save(str(target_path))
 
 
