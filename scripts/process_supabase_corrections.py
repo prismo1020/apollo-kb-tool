@@ -158,10 +158,12 @@ def build_kb_index_with_sources(
         lines.append("These files contain text that closely matches what Apollo said incorrectly.")
         lines.append("These MUST be corrected — find the specific wrong statement and fix it.")
         lines.append("")
-        for hit in sources:
+        # Keep source excerpts compact — Chatbase caps messages at 8000 chars and
+        # the identifier chunks the full index separately.
+        for hit in sources[:5]:
             lines.append(f"FILE: {hit['file']}")
             lines.append(f"SECTION: {hit['section_heading']}")
-            lines.append(f"CONTENT:\n{hit['section_text'][:2000]}")
+            lines.append(f"CONTENT:\n{hit['section_text'][:700]}")
             lines.append("")
         lines.append("=" * 60)
         lines.append("")
@@ -377,23 +379,20 @@ def find_related_files(
             score += 0.15
         if score <= 0.0:
             continue
-        # Compact each file's full text for the creator bot
+        # Keep headings (for the pass-1 selector) and full text (for pass-2 creation)
+        headings = [s["heading"] for s in record.get("sections", [])]
         full_text = "\n".join(
             f"*{s['heading']}*\n{s['text']}" for s in record.get("sections", [])
         )
-        scored.append((score, {"file": record["file"], "section_text": full_text, "score": round(score, 3)}))
+        scored.append((score, {
+            "file": record["file"],
+            "headings": headings,
+            "section_text": full_text,
+            "score": round(score, 3),
+        }))
 
     scored.sort(key=lambda x: x[0], reverse=True)
     return [item for _score, item in scored[:limit]]
-
-
-def build_related_files_block(related: list[dict[str, Any]]) -> str:
-    lines: list[str] = []
-    for hit in related:
-        lines.append(f"FILE: {hit['file']}")
-        lines.append(f"CONTENT:\n{hit['section_text'][:4000]}")
-        lines.append("")
-    return "\n".join(lines)
 
 
 def analyze_file_requests() -> int:
@@ -431,9 +430,8 @@ def analyze_file_requests() -> int:
                 continue
 
             related = find_related_files(topic, description, category, all_records)
-            related_block = build_related_files_block(related)
 
-            result = llm_create_kb_file(topic, category, description, oasis_link, related_block)
+            result = llm_create_kb_file(topic, category, description, oasis_link, related)
 
             slug = logic.slugify(result.get("topic_slug") or topic, "NEW_FILE")
             cat_slug = logic.slugify(category or "CORRECTION", "CORRECTION")
