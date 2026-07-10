@@ -1056,7 +1056,7 @@ async function downloadKBZip() {
     let extracted = 0;
     let failed = 0;
     for (const { path, text, error } of results) {
-      const name = path.replace(/\.docx$/i, ".txt");
+      const name = path.split("/").pop();
       if (text) {
         folder.file(name, text);
         extracted++;
