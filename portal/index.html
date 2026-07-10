@@ -25,6 +25,9 @@
           <button class="nav-item active" type="button" data-view="submit">
             <span class="nav-dot"></span>Submit Correction
           </button>
+          <button class="nav-item" type="button" data-view="createFile">
+            <span class="nav-dot"></span>Create KB File
+          </button>
           <button class="nav-item" type="button" data-view="review">
             <span class="nav-dot"></span>Review Queue
           </button>
@@ -210,6 +213,99 @@
           </div>
         </section>
 
+        <!-- ── CREATE KB FILE VIEW ── -->
+        <section class="view" id="createFileView">
+          <div class="layout-grid">
+
+            <form class="panel correction-panel" id="createFileForm">
+              <div class="section-title">
+                <h2>Create a New KB File</h2>
+                <span class="rule"></span>
+              </div>
+
+              <p class="guide-intro" style="margin-bottom:18px">
+                Describe a topic Apollo should know about. The AI reads the entire knowledge base, writes a comprehensive new KB file, and automatically cross-references the related files. It lands in the <strong>Review Queue</strong> for your approval before anything is published.
+              </p>
+
+              <label class="field">
+                <span>File topic <span style="color:var(--danger)">*</span></span>
+                <input id="cfTopic" type="text" placeholder="e.g. TactSuit Pro Firmware Updates" />
+                <span class="field-hint">Becomes the filename. A short, clear subject.</span>
+                <span class="filename-preview" id="cfFilenamePreview"></span>
+              </label>
+
+              <div class="field-row">
+                <label class="field">
+                  <span>Category <span style="color:var(--danger)">*</span></span>
+                  <select id="cfCategory">
+                    <option value="">Select a category…</option>
+                    <option>TECH</option>
+                    <option>OPERATIONS</option>
+                    <option>POLICY</option>
+                    <option>EXPERIENCES</option>
+                    <option>SYSTEMS</option>
+                    <option>ADMIN</option>
+                    <option>STAFF</option>
+                    <option>GUEST</option>
+                    <option>VISUAL</option>
+                    <option>OPS_FLOW</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>Reviewer</span>
+                  <input id="cfReviewer" type="text" placeholder="Name or initials" />
+                </label>
+              </div>
+
+              <label class="field">
+                <span>What should this file cover? <span style="color:var(--danger)">*</span></span>
+                <textarea id="cfDescription" rows="6" placeholder="Describe the topic in detail. What does Apollo need to know? Include any rules, steps, approvals, edge cases, and things Apollo should NOT do. The more detail, the more comprehensive the file."></textarea>
+                <span class="field-hint">The AI auto-detects which existing files relate — you don't need to list them.</span>
+              </label>
+
+              <label class="field">
+                <span>Oasis SOP link</span>
+                <input id="cfOasisLink" type="url" placeholder="https://sites.google.com/sandboxvr.com/theoasis/..." />
+                <span class="field-hint">The source-of-truth SOP for this topic, if one exists.</span>
+              </label>
+
+              <div class="button-row">
+                <button class="button primary" type="submit">Generate New KB File →</button>
+                <button class="button quiet" id="cfClear" type="button">Clear</button>
+              </div>
+            </form>
+
+            <section class="panel guide-panel">
+              <div class="section-title">
+                <h2>How File Creation Works</h2>
+                <span class="rule"></span>
+              </div>
+
+              <div class="guide-section">
+                <div class="guide-section-label">The Flow</div>
+                <ol class="guide-steps">
+                  <li><strong>Describe the topic</strong> — Fill in the topic, category, and a detailed description of what the file should cover.</li>
+                  <li><strong>AI drafts the file</strong> — The Apollo KB File Creator reads the whole KB, writes a comprehensive 8–12 section file, and links related files automatically. Runs every 10 minutes, or hit <em>Run Automation Now</em> in the Review Queue.</li>
+                  <li><strong>Review</strong> — The draft appears in the <em>Review Queue</em> marked <span class="inline-chip needs_review">needs review</span>. Read the generated content, check the auto-detected related files, and edit anything.</li>
+                  <li><strong>Approve</strong> — Click <em>Approve</em>. The new file is numbered, committed to GitHub, and indexed so future corrections can route to it.</li>
+                  <li><strong>Sync to Chatbase</strong> — Download it from the Activity Log and upload to Chatbase, same as any correction.</li>
+                </ol>
+              </div>
+
+              <div class="guide-section">
+                <div class="guide-section-label">Tips for a Great File</div>
+                <ul class="guide-tips">
+                  <li>Be specific in the description — list the rules, the steps, who approves what, and the edge cases.</li>
+                  <li>Call out anything Apollo should <em>never</em> say — those become DO NOT rules.</li>
+                  <li>If a detail isn't confirmed yet, say so — the AI will flag it as <em>[Needs Confirmation]</em> rather than guessing.</li>
+                  <li>Pick the right category — it helps the AI find the most relevant existing files to cross-reference.</li>
+                </ul>
+              </div>
+            </section>
+
+          </div>
+        </section>
+
         <!-- ── REVIEW VIEW ── -->
         <section class="view" id="reviewView">
           <div class="review-layout">
@@ -275,6 +371,17 @@
                 <div class="alert-banner new-file-banner hidden" id="newFileBanner" style="background:var(--trigger-light);border-color:var(--trigger);color:var(--text-primary);flex-direction:column;align-items:flex-start;gap:6px">
                   <strong style="font-size:12px;text-transform:uppercase;letter-spacing:0.08em;color:var(--trigger)">Creating a new KB file</strong>
                   <span style="font-size:13px;font-weight:400">Fill in the two fields below. The <strong>Target File</strong> and <strong>Section Heading</strong> above are ignored — they only apply when updating an existing file.</span>
+                </div>
+
+                <!-- AI-generated file-creation info — only for Create KB File requests -->
+                <div class="alert-banner hidden" id="fileCreationBanner" style="background:var(--success-light);border-color:var(--success);color:#0a5f43;flex-direction:column;align-items:flex-start;gap:8px">
+                  <strong style="font-size:12px;text-transform:uppercase;letter-spacing:0.08em">AI-Generated New KB File</strong>
+                  <span style="font-size:13px;font-weight:400">Proposed filename: <code id="fcFilename" style="font-weight:700"></code></span>
+                  <div id="fcRelatedWrap" style="font-size:13px;font-weight:400">
+                    <span style="display:block;margin-bottom:4px">Related files it cross-references:</span>
+                    <div id="fcRelatedChips" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+                  </div>
+                  <span style="font-size:13px;font-weight:400">Review the full generated content below and edit before approving.</span>
                 </div>
 
                 <div class="field-row" id="existingFileFields">

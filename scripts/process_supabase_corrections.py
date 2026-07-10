@@ -11,7 +11,7 @@ from typing import Any
 
 import requests
 
-from llm_kb_editor import llm_edit_section, llm_identify_files
+from llm_kb_editor import llm_edit_section, llm_identify_files, llm_create_kb_file
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -183,6 +183,7 @@ def analyze_submitted() -> int:
         {
             "select": "*",
             "status": "eq.submitted",
+            "request_type": "neq.file_creation",
             "order": "created_at.asc",
             "limit": "25",
         },
@@ -348,6 +349,138 @@ def apply_payload_from_row(row: dict[str, Any]) -> dict[str, Any]:
     return payload
 
 
+# ── NEW KB FILE CREATION ──────────────────────────────────────────────────
+
+def find_related_files(
+    topic: str,
+    description: str,
+    category: str,
+    all_records: list[dict[str, Any]],
+    limit: int = 8,
+) -> list[dict[str, Any]]:
+    """Auto-detect KB files related to a new-file topic by token overlap + category.
+
+    Returns a list of {file, section_text, score} for the most relevant files.
+    """
+    query = f"{topic} {topic} {description}"  # weight the topic
+    query_tokens = set(logic.tokenize(query))
+    if not query_tokens:
+        return []
+
+    cat = (category or "").strip().upper()
+    scored: list[tuple[float, dict[str, Any]]] = []
+    for record in all_records:
+        overlap = query_tokens & record["token_set"]
+        score = len(overlap) / len(query_tokens)
+        # Boost files that share the requested category (filename convention: _NN_CATEGORY__...)
+        if cat and cat in record["file"].upper():
+            score += 0.15
+        if score <= 0.0:
+            continue
+        # Compact each file's full text for the creator bot
+        full_text = "\n".join(
+            f"*{s['heading']}*\n{s['text']}" for s in record.get("sections", [])
+        )
+        scored.append((score, {"file": record["file"], "section_text": full_text, "score": round(score, 3)}))
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return [item for _score, item in scored[:limit]]
+
+
+def build_related_files_block(related: list[dict[str, Any]]) -> str:
+    lines: list[str] = []
+    for hit in related:
+        lines.append(f"FILE: {hit['file']}")
+        lines.append(f"CONTENT:\n{hit['section_text'][:4000]}")
+        lines.append("")
+    return "\n".join(lines)
+
+
+def analyze_file_requests() -> int:
+    """Analyze submitted new-KB-file requests: detect related files, generate content."""
+    rows = supabase_get(
+        "apollo_corrections",
+        {
+            "select": "*",
+            "request_type": "eq.file_creation",
+            "status": "eq.submitted",
+            "order": "created_at.asc",
+            "limit": "10",
+        },
+    )
+    if not rows:
+        return 0
+
+    all_records = logic.load_index()
+    processed = 0
+
+    for row in rows:
+        try:
+            topic = (row.get("new_topic") or "").strip()
+            description = (row.get("new_purpose") or "").strip()
+            category = (row.get("category") or "").strip()
+            oasis_link = (row.get("oasis_link") or "").strip()
+
+            if not topic:
+                supabase_patch(
+                    "apollo_corrections",
+                    row["id"],
+                    {"status": "needs_review", "failure_reason": "New file request has no topic."},
+                )
+                processed += 1
+                continue
+
+            related = find_related_files(topic, description, category, all_records)
+            related_block = build_related_files_block(related)
+
+            result = llm_create_kb_file(topic, category, description, oasis_link, related_block)
+
+            slug = logic.slugify(result.get("topic_slug") or topic, "NEW_FILE")
+            cat_slug = logic.slugify(category or "CORRECTION", "CORRECTION")
+            number = logic.next_file_number()
+            proposed_filename = f"_{number:02d}_{cat_slug}__{slug}.docx"
+
+            content = (result.get("content") or "").strip()
+            cross_refs = result.get("cross_references") or []
+            confidence = result.get("confidence") or "Medium"
+            reasoning = result.get("reasoning") or ""
+
+            supabase_patch(
+                "apollo_corrections",
+                row["id"],
+                {
+                    "status": "needs_review",
+                    "mode": "new",
+                    "target_file": proposed_filename,
+                    "proposed_replacement": content,
+                    "analysis": {
+                        "llm_reasoning": reasoning,
+                        "llm_confidence": confidence,
+                        "related_files": [r["file"] for r in related],
+                        "cross_references": cross_refs,
+                        "is_file_creation": True,
+                    },
+                    "failure_reason": None,
+                },
+            )
+            processed += 1
+        except Exception as exc:
+            supabase_patch(
+                "apollo_corrections",
+                row["id"],
+                {"status": "failed", "failure_reason": f"File creation analysis failed: {exc}"},
+            )
+    return processed
+
+
+def create_file_docx(target_path: Path, content: str) -> None:
+    """Write generated KB file content to a .docx, one paragraph per line."""
+    doc = logic.Document()
+    for line in content.splitlines():
+        doc.add_paragraph(line)
+    doc.save(str(target_path))
+
+
 def run_git(args: list[str], check: bool = True) -> subprocess.CompletedProcess[str]:
     result = subprocess.run(
         ["git", *args],
@@ -404,7 +537,24 @@ def apply_approved() -> int:
             supabase_patch("apollo_corrections", row["id"], {"status": "processing", "failure_reason": None})
             targets = row.get("targets")
 
-            if targets and isinstance(targets, list) and len(targets) > 1:
+            if row.get("request_type") == "file_creation":
+                # New KB file — write the generated content to a fresh .docx
+                filename = Path((row.get("target_file") or "").strip()).name
+                if not filename.lower().endswith(".docx"):
+                    raise ValueError("File creation request has no valid target filename.")
+                target_path = (REPO_ROOT / filename).resolve()
+                if REPO_ROOT not in target_path.parents:
+                    raise ValueError("Unsafe file path for new KB file.")
+                if target_path.exists():
+                    raise FileExistsError(f"{filename} already exists.")
+                content = (row.get("proposed_replacement") or "").strip()
+                if not content:
+                    raise ValueError("File creation request has no generated content.")
+                create_file_docx(target_path, content)
+                logic.load_index(force=True)
+                applied_rows.append((row, filename))
+                all_target_files.append(filename)
+            elif targets and isinstance(targets, list) and len(targets) > 1:
                 # Multi-file correction — apply only targets with status "approved"
                 row_files: list[str] = []
                 for target in targets:
@@ -474,9 +624,11 @@ def apply_approved() -> int:
 def main() -> None:
     require_env()
     analyzed = analyze_submitted()
+    file_requests = analyze_file_requests()
     applied = apply_approved()
     print(f"Analyzed {analyzed} submitted correction(s).")
-    print(f"Applied {applied} approved correction(s).")
+    print(f"Analyzed {file_requests} new-file request(s).")
+    print(f"Applied {applied} approved item(s).")
 
 
 if __name__ == "__main__":

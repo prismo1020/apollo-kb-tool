@@ -124,6 +124,71 @@ def llm_identify_files(
     return [str(f) for f in files if f]
 
 
+def llm_create_kb_file(
+    topic: str,
+    category: str,
+    description: str,
+    oasis_link: str,
+    related_files_block: str,
+) -> dict[str, Any]:
+    """Ask the KB File Creator bot to write a comprehensive new KB file.
+
+    related_files_block: a string of "FILE: name\nCONTENT:\n<text>" blocks for
+    auto-detected related files, so the bot can stay consistent and cross-reference.
+    Returns dict with topic_slug, content, cross_references, confidence, reasoning.
+    """
+    api_key = os.environ.get("CHATBASE_API_KEY", "")
+    bot_id = os.environ.get("CHATBASE_KB_FILE_CREATOR_BOT_ID", "")
+    if not api_key:
+        raise RuntimeError("CHATBASE_API_KEY environment variable is not set.")
+    if not bot_id:
+        raise RuntimeError("CHATBASE_KB_FILE_CREATOR_BOT_ID environment variable is not set.")
+
+    # Cap related content to avoid Chatbase 400 payload errors
+    related_capped = related_files_block[:45000] if len(related_files_block) > 45000 else related_files_block
+    user_message = (
+        f"TOPIC: {topic.strip()}\n"
+        f"CATEGORY: {category.strip() or 'CORRECTION'}\n"
+        f"DESCRIPTION: {description.strip()}\n"
+        f"OASIS LINK: {oasis_link.strip() or '(none provided)'}\n\n"
+        f"RELATED KB FILES:\n{related_capped}"
+    )
+
+    response = requests.post(
+        CHATBASE_CHAT_URL,
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+        json={
+            "chatbotId": bot_id,
+            "messages": [{"role": "user", "content": user_message}],
+            "stream": False,
+        },
+        timeout=REQUEST_TIMEOUT,
+    )
+    response.raise_for_status()
+
+    raw = response.json().get("text", "").strip()
+    if raw.startswith("```"):
+        lines = raw.splitlines()
+        raw = "\n".join(line for line in lines if not line.startswith("```")).strip()
+
+    result: dict[str, Any] = json.loads(raw)
+
+    required = {"topic_slug", "content"}
+    missing = required - result.keys()
+    if missing:
+        raise ValueError(f"KB File Creator response missing required fields: {missing}")
+    if not (result.get("content") or "").strip():
+        raise ValueError("KB File Creator returned empty content.")
+
+    result.setdefault("cross_references", [])
+    result.setdefault("confidence", "Medium")
+    result.setdefault("reasoning", "")
+    return result
+
+
 def _build_user_message(
     payload: dict[str, Any],
     candidate_file: str,

@@ -62,6 +62,19 @@ const els = {
   confirmApprove: document.getElementById("confirmApprove"),
   cancelConfirm: document.getElementById("cancelConfirm"),
   toast: document.getElementById("toast"),
+  // Create KB File
+  createFileForm: document.getElementById("createFileForm"),
+  cfTopic: document.getElementById("cfTopic"),
+  cfCategory: document.getElementById("cfCategory"),
+  cfReviewer: document.getElementById("cfReviewer"),
+  cfDescription: document.getElementById("cfDescription"),
+  cfOasisLink: document.getElementById("cfOasisLink"),
+  cfClear: document.getElementById("cfClear"),
+  cfFilenamePreview: document.getElementById("cfFilenamePreview"),
+  fileCreationBanner: document.getElementById("fileCreationBanner"),
+  fcFilename: document.getElementById("fcFilename"),
+  fcRelatedChips: document.getElementById("fcRelatedChips"),
+  fcRelatedWrap: document.getElementById("fcRelatedWrap"),
 };
 
 // ── UTILS ──────────────────────────────────────────────────────────────────
@@ -188,6 +201,61 @@ function addToBatch() {
   state.drafts.push(payload);
   clearCorrectionFields(true);
   renderBatch();
+}
+
+// ── CREATE KB FILE ────────────────────────────────────────────────────────
+
+function updateCfFilenamePreview() {
+  const topic = (els.cfTopic.value || "").trim().toUpperCase();
+  const category = (els.cfCategory.value || "").trim().toUpperCase() || "TECH";
+  const slug = topic.replace(/[^A-Z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 60);
+  if (!els.cfFilenamePreview) return;
+  if (slug) {
+    els.cfFilenamePreview.textContent = `→ Will be saved as: _???_${category}__${slug}.docx`;
+    els.cfFilenamePreview.classList.add("has-preview");
+  } else {
+    els.cfFilenamePreview.textContent = "";
+    els.cfFilenamePreview.classList.remove("has-preview");
+  }
+}
+
+function clearCreateFileForm() {
+  els.cfTopic.value = "";
+  els.cfCategory.value = "";
+  els.cfReviewer.value = "";
+  els.cfDescription.value = "";
+  els.cfOasisLink.value = "";
+  updateCfFilenamePreview();
+}
+
+async function submitCreateFile() {
+  const topic = els.cfTopic.value.trim();
+  const category = els.cfCategory.value.trim();
+  const description = els.cfDescription.value.trim();
+  if (!topic) { showToast("Add a file topic — it becomes the filename."); els.cfTopic.focus(); return; }
+  if (!category) { showToast("Pick a category."); els.cfCategory.focus(); return; }
+  if (!description) { showToast("Describe what the file should cover."); els.cfDescription.focus(); return; }
+
+  const row = {
+    request_type: "file_creation",
+    status: "submitted",
+    mode: "new",
+    new_topic: topic,
+    category,
+    new_purpose: description,
+    oasis_link: els.cfOasisLink.value.trim(),
+    reviewer_label: els.cfReviewer.value.trim(),
+    // reuse the question field so it renders nicely in the queue list
+    question: `New KB file: ${topic}`,
+  };
+
+  setSync("Submitting");
+  const { error } = await supabaseClient.from("apollo_corrections").insert([row]);
+  if (error) throw error;
+  setSync("Ready", true);
+  showToast("New file request submitted — the AI will draft it shortly.", "success");
+  clearCreateFileForm();
+  await loadCorrections();
 }
 
 // ── QUEUE ─────────────────────────────────────────────────────────────────
@@ -388,6 +456,56 @@ function updateFilenamePreview() {
   }
 }
 
+function applyFileCreationView(item, isFileCreation) {
+  const decisionStrip = document.querySelector(".decision-strip");
+  const newFields = document.querySelector(".new-fields");
+  const existingFields = document.getElementById("existingFileFields");
+  const ghostFields = document.getElementById("existingFileFieldsGhost");
+  const newFileBanner = document.getElementById("newFileBanner");
+  const currentSectionField = els.currentSection.closest(".field");
+
+  // Toggle the dedicated banner
+  els.fileCreationBanner.classList.toggle("hidden", !isFileCreation);
+
+  if (isFileCreation) {
+    // Hide all the correction-mode chrome — this is a pure generated file
+    if (decisionStrip) decisionStrip.classList.add("hidden");
+    if (newFields) newFields.classList.add("hidden");
+    if (existingFields) existingFields.classList.add("hidden");
+    if (ghostFields) ghostFields.classList.add("hidden");
+    if (newFileBanner) newFileBanner.classList.add("hidden");
+    // No "current section" for a brand new file — hide that column
+    if (currentSectionField) currentSectionField.classList.add("hidden");
+
+    // Populate filename + related-file chips
+    const filename = (item.target_file || "").replace(/.*\//, "");
+    els.fcFilename.textContent = filename || "(pending)";
+    const related = item.analysis?.cross_references?.length
+      ? item.analysis.cross_references
+      : (item.analysis?.related_files || []);
+    if (related.length) {
+      els.fcRelatedWrap.style.display = "";
+      els.fcRelatedChips.innerHTML = related
+        .map((f) => `<span class="status-chip">${escapeHtml((f || "").replace(/.*\//, ""))}</span>`)
+        .join("");
+    } else {
+      els.fcRelatedWrap.style.display = "none";
+    }
+
+    // Relabel the proposed column and give it more room
+    const proposedLabel = els.proposedReplacement.closest(".field")?.querySelector("span");
+    if (proposedLabel) proposedLabel.textContent = "Generated KB file — edit before approving";
+    els.proposedReplacement.rows = 28;
+  } else {
+    // Restore correction-mode chrome
+    if (decisionStrip) decisionStrip.classList.remove("hidden");
+    if (currentSectionField) currentSectionField.classList.remove("hidden");
+    const proposedLabel = els.proposedReplacement.closest(".field")?.querySelector("span");
+    if (proposedLabel) proposedLabel.textContent = "Proposed replacement — edit before approving";
+    els.proposedReplacement.rows = 16;
+  }
+}
+
 function renderDetail() {
   const item = selectedCorrection();
   if (!item) {
@@ -407,6 +525,10 @@ function renderDetail() {
   els.currentSection.value = item.current_section || "";
   els.proposedReplacement.value = item.proposed_replacement || item.approved_answer || "";
   setMode(item.mode || "existing");
+
+  // File-creation requests get a dedicated presentation
+  const isFileCreation = item.request_type === "file_creation";
+  applyFileCreationView(item, isFileCreation);
 
   // Commit link
   els.commitLink.classList.toggle("hidden", !item.github_commit_url);
@@ -613,15 +735,24 @@ async function runAutomationNow() {
 async function saveSelected(statusOverride = null) {
   const item = selectedCorrection();
   if (!item) return;
-  const update = {
-    mode: state.mode,
-    target_file: els.targetFile.value.trim() || null,
-    target_section_heading: els.targetSection.value.trim() || null,
-    current_section: els.currentSection.value,
-    proposed_replacement: els.proposedReplacement.value.trim(),
-    new_topic: els.newTopic.value.trim(),
-    new_purpose: els.newPurpose.value.trim(),
-  };
+
+  let update;
+  if (item.request_type === "file_creation") {
+    // For generated files, only the content is editable — keep filename/topic intact
+    update = {
+      proposed_replacement: els.proposedReplacement.value.trim(),
+    };
+  } else {
+    update = {
+      mode: state.mode,
+      target_file: els.targetFile.value.trim() || null,
+      target_section_heading: els.targetSection.value.trim() || null,
+      current_section: els.currentSection.value,
+      proposed_replacement: els.proposedReplacement.value.trim(),
+      new_topic: els.newTopic.value.trim(),
+      new_purpose: els.newPurpose.value.trim(),
+    };
+  }
   if (statusOverride) update.status = statusOverride;
 
   setSync("Saving");
@@ -635,6 +766,21 @@ async function saveSelected(statusOverride = null) {
 function openConfirm() {
   const item = selectedCorrection();
   if (!item) return;
+
+  // File-creation approval — simplest path
+  if (item.request_type === "file_creation") {
+    if (!els.proposedReplacement.value.trim()) {
+      showToast("The generated file is empty — nothing to approve.");
+      return;
+    }
+    state.pendingMultiTargets = null;
+    const filename = (item.target_file || "the new file").replace(/.*\//, "");
+    els.confirmText.textContent = `This will create ${filename} and commit it to GitHub. It will be indexed so future corrections can route to it.`;
+    els.reviewedCheck.checked = false;
+    els.confirmApprove.disabled = true;
+    els.confirmLayer.classList.remove("hidden");
+    return;
+  }
 
   const targets = item.targets;
   const isMultiTarget = Array.isArray(targets) && targets.length > 1;
@@ -994,6 +1140,19 @@ els.form.addEventListener("submit", async (event) => {
     showToast(error.message);
   }
 });
+
+els.createFileForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  try {
+    await submitCreateFile();
+  } catch (error) {
+    setSync("Ready", true);
+    showToast(error.message);
+  }
+});
+els.cfClear.addEventListener("click", clearCreateFileForm);
+els.cfTopic.addEventListener("input", updateCfFilenamePreview);
+els.cfCategory.addEventListener("change", updateCfFilenamePreview);
 
 els.addToBatch.addEventListener("click", addToBatch);
 els.submitBatch.addEventListener("click", async () => {
