@@ -124,4 +124,3 @@ supabase functions deploy run-kb-automation --project-ref lexjlvnrqzplxthwkwfp
 6. Supabase marks the correction as `applied` with the GitHub commit link.
 
 The first automated version will run on a short schedule and by manual button in GitHub Actions. We can later make approval trigger instantly with a Supabase Edge Function.
-
