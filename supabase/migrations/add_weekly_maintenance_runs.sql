@@ -43,4 +43,3 @@ using (true)
 with check (true);
 
 grant select, insert, update on public.apollo_maintenance_runs to anon, authenticated, service_role;
-
