@@ -305,4 +305,3 @@ grant usage, select on sequence public.apollo_correction_events_id_seq to authen
 -- update public.apollo_profiles
 -- set role = 'admin'
 -- where email = 'YOUR_EMAIL_HERE';
-
