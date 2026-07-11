@@ -2,10 +2,40 @@ const config = window.APOLLO_CONFIG || {};
 const supabaseClient = window.supabase.createClient(config.supabaseUrl, config.supabaseAnonKey);
 
 const GITHUB_RAW_BASE = "https://raw.githubusercontent.com/prismo1020/apollo-kb-tool/main/";
+const MAINTENANCE_STORAGE_KEY = "apolloWeeklyMaintenance";
+const MAINTENANCE_TASKS = [
+  {
+    key: "review_queue",
+    label: "Review the correction queue",
+    detail: "Clear anything marked analysis ready or needs review, and note anything waiting on clarification.",
+  },
+  {
+    key: "check_failures",
+    label: "Check for failed or stuck automation",
+    detail: "Look for failed, processing, or approved items that need manual follow-up.",
+  },
+  {
+    key: "drive_backup",
+    label: "Confirm Google Drive backup",
+    detail: "Make sure applied KB files have been downloaded and uploaded to the Drive backup folder.",
+  },
+  {
+    key: "chatbase_sync",
+    label: "Confirm Chatbase retraining",
+    detail: "Replace updated files in Chatbase, retrain Apollo, and mark the Activity Log sync checkbox.",
+  },
+  {
+    key: "patch_notes",
+    label: "Generate weekly patch notes when needed",
+    detail: "Download patch notes for the last 7 days if any corrections were applied this week.",
+  },
+];
 
 const state = {
   drafts: [],
   corrections: [],
+  maintenanceRecords: [],
+  maintenanceLogSource: "browser",
   selectedId: null,
   mode: "existing",
   pendingMultiTargets: null,
@@ -75,9 +105,21 @@ const els = {
   fcFilename: document.getElementById("fcFilename"),
   fcRelatedChips: document.getElementById("fcRelatedChips"),
   fcRelatedWrap: document.getElementById("fcRelatedWrap"),
+  maintenanceChecklist: document.getElementById("maintenanceChecklist"),
+  maintenanceSummary: document.getElementById("maintenanceSummary"),
+  maintenanceLog: document.getElementById("maintenanceLog"),
+  maintenanceCompletedBy: document.getElementById("maintenanceCompletedBy"),
+  maintenanceWeekInput: document.getElementById("maintenanceWeekInput"),
+  maintenanceNotes: document.getElementById("maintenanceNotes"),
+  maintenanceWeekStatus: document.getElementById("maintenanceWeekStatus"),
+  maintenanceWeekLabel: document.getElementById("maintenanceWeekLabel"),
+  maintenanceLastDone: document.getElementById("maintenanceLastDone"),
+  maintenanceSaveHint: document.getElementById("maintenanceSaveHint"),
+  confirmMaintenance: document.getElementById("confirmMaintenance"),
+  refreshMaintenance: document.getElementById("refreshMaintenance"),
 };
 
-// ── UTILS ──────────────────────────────────────────────────────────────────
+// â”€â”€ UTILS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function showToast(message, type = "default") {
   els.toast.textContent = message;
@@ -119,7 +161,7 @@ function switchToView(viewName) {
   if (view) view.classList.add("active");
 }
 
-// ── FORM ──────────────────────────────────────────────────────────────────
+// â”€â”€ FORM â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function formPayload() {
   return {
@@ -149,7 +191,7 @@ function clearCorrectionFields(keepMeta = false) {
   }
 }
 
-// ── BATCH ─────────────────────────────────────────────────────────────────
+// â”€â”€ BATCH â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function renderBatch() {
   els.batchCount.textContent = `${state.drafts.length} pending`;
@@ -203,7 +245,7 @@ function addToBatch() {
   renderBatch();
 }
 
-// ── CREATE KB FILE ────────────────────────────────────────────────────────
+// â”€â”€ CREATE KB FILE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function updateCfFilenamePreview() {
   const topic = (els.cfTopic.value || "").trim().toUpperCase();
@@ -211,7 +253,7 @@ function updateCfFilenamePreview() {
   const slug = topic.replace(/[^A-Z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 60);
   if (!els.cfFilenamePreview) return;
   if (slug) {
-    els.cfFilenamePreview.textContent = `→ Will be saved as: _???_${category}__${slug}.docx`;
+    els.cfFilenamePreview.textContent = `â†’ Will be saved as: _???_${category}__${slug}.docx`;
     els.cfFilenamePreview.classList.add("has-preview");
   } else {
     els.cfFilenamePreview.textContent = "";
@@ -232,7 +274,7 @@ async function submitCreateFile() {
   const topic = els.cfTopic.value.trim();
   const category = els.cfCategory.value.trim();
   const description = els.cfDescription.value.trim();
-  if (!topic) { showToast("Add a file topic — it becomes the filename."); els.cfTopic.focus(); return; }
+  if (!topic) { showToast("Add a file topic â€” it becomes the filename."); els.cfTopic.focus(); return; }
   if (!category) { showToast("Pick a category."); els.cfCategory.focus(); return; }
   if (!description) { showToast("Describe what the file should cover."); els.cfDescription.focus(); return; }
 
@@ -253,12 +295,12 @@ async function submitCreateFile() {
   const { error } = await supabaseClient.from("apollo_corrections").insert([row]);
   if (error) throw error;
   setSync("Ready", true);
-  showToast("New file request submitted — the AI will draft it shortly.", "success");
+  showToast("New file request submitted â€” the AI will draft it shortly.", "success");
   clearCreateFileForm();
   await loadCorrections();
 }
 
-// ── QUEUE ─────────────────────────────────────────────────────────────────
+// â”€â”€ QUEUE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function selectedCorrection() {
   return state.corrections.find((item) => item.id === state.selectedId) || null;
@@ -300,7 +342,7 @@ function renderQueue() {
   }
 }
 
-// ── ACTIVITY ──────────────────────────────────────────────────────────────
+// â”€â”€ ACTIVITY â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 async function loadActivity() {
   const { data, error } = await supabaseClient
@@ -326,7 +368,7 @@ async function toggleChatbaseSync(id, checked) {
     if (chip) {
       chip.className = `status-chip ${checked ? "applied" : ""} chatbase-sync-chip`;
       chip.dataset.id = id;
-      chip.textContent = checked ? "✓ Synced to Chatbase" : "Not synced to Chatbase";
+      chip.textContent = checked ? "âœ“ Synced to Chatbase" : "Not synced to Chatbase";
     }
   } catch (err) {
     showToast(`Sync save failed: ${err.message}`);
@@ -350,7 +392,7 @@ async function toggleGdriveSync(id, checked) {
     if (chip) {
       chip.className = `status-chip ${checked ? "applied" : ""} gdrive-sync-chip`;
       chip.dataset.id = id;
-      chip.textContent = checked ? "✓ Synced to Drive" : "Not synced to Drive";
+      chip.textContent = checked ? "âœ“ Synced to Drive" : "Not synced to Drive";
     }
   } catch (err) {
     showToast(`Sync save failed: ${err.message}`);
@@ -383,453 +425,7 @@ function renderActivity(items) {
           <span class="recent-time">${escapeHtml(new Date(item.updated_at).toLocaleString())}</span>
           <strong>${escapeHtml(item.target_file || shortText(item.question, "No target file"))}</strong>
           <div style="display:flex;align-items:center;gap:8px;margin-top:6px;flex-wrap:wrap">
-            <span class="status-chip ${escapeHtml(item.status)}">${escapeHtml(statusLabel(item.status))}</span>
-            <span class="status-chip ${gdSynced ? "applied" : ""} gdrive-sync-chip" data-id="${escapeHtml(item.id)}">${gdSynced ? `✓ Synced to Drive${gdSyncedAt ? ` · ${gdSyncedAt}` : ""}` : "Not synced to Drive"}</span>
-            <span class="status-chip ${cbSynced ? "applied" : ""} chatbase-sync-chip" data-id="${escapeHtml(item.id)}">${cbSynced ? `✓ Synced to Chatbase${cbSyncedAt ? ` · ${cbSyncedAt}` : ""}` : "Not synced to Chatbase"}</span>
-            ${item.github_commit_url ? `<a href="${escapeHtml(item.github_commit_url)}" target="_blank" rel="noreferrer" class="commit-link" style="font-size:12px">View Commit →</a>` : ""}
-          </div>
-          ${isApplied && item.target_file ? `
-            <div class="activity-sync-row" data-id="${escapeHtml(item.id)}">
-              <div class="button-row" style="margin-bottom:10px">
-                <button class="button secondary compact activity-dl-btn" data-file="${escapeHtml(item.target_file)}" type="button">Download .txt</button>
-                <button class="button quiet compact activity-copy-btn" data-file="${escapeHtml(item.target_file)}" type="button">Copy for Chatbase</button>
-              </div>
-              <label class="sync-checkbox-label">
-                <input type="checkbox" class="gdrive-sync-cb" data-id="${escapeHtml(item.id)}" ${gdSynced ? "checked" : ""} />
-                <span>Synced to Google Drive backup</span>
-              </label>
-              <label class="sync-checkbox-label" style="margin-top:6px">
-                <input type="checkbox" class="chatbase-sync-cb" data-id="${escapeHtml(item.id)}" ${cbSynced ? "checked" : ""} />
-                <span>Synced to Chatbase</span>
-              </label>
-            </div>
-          ` : ""}
-          ${item.failure_reason && item.status !== "rejected" ? `<span style="font-size:12px;color:var(--danger);margin-top:4px;display:block">${escapeHtml(item.failure_reason)}</span>` : ""}
-          ${item.status === "rejected" && item.failure_reason ? `<span style="font-size:12px;color:var(--text-muted);margin-top:4px;display:block">Rejection reason: ${escapeHtml(item.failure_reason)}</span>` : ""}
-        </div>
-      `;
-    })
-    .join("");
-
-  els.activityList.querySelectorAll(".gdrive-sync-cb").forEach((cb) => {
-    cb.addEventListener("change", () => toggleGdriveSync(cb.dataset.id, cb.checked));
-  });
-  els.activityList.querySelectorAll(".chatbase-sync-cb").forEach((cb) => {
-    cb.addEventListener("change", () => toggleChatbaseSync(cb.dataset.id, cb.checked));
-  });
-  els.activityList.querySelectorAll(".activity-dl-btn").forEach((btn) => {
-    btn.addEventListener("click", () => downloadFileByPath(btn.dataset.file, btn));
-  });
-  els.activityList.querySelectorAll(".activity-copy-btn").forEach((btn) => {
-    btn.addEventListener("click", () => copyFileByPath(btn.dataset.file, btn));
-  });
-}
-
-// ── DETAIL PANEL ──────────────────────────────────────────────────────────
-
-function setMode(mode) {
-  state.mode = mode;
-  els.modeExisting.classList.toggle("active", mode === "existing");
-  els.modeNew.classList.toggle("active", mode === "new");
-  document.querySelector(".new-fields").classList.toggle("hidden", mode !== "new");
-
-  const isNew = mode === "new";
-  document.getElementById("newFileBanner").classList.toggle("hidden", !isNew);
-  document.getElementById("existingFileFields").classList.toggle("hidden", isNew);
-  document.getElementById("existingFileFieldsGhost").classList.toggle("hidden", !isNew);
-  updateFilenamePreview();
-}
-
-function updateFilenamePreview() {
-  if (state.mode !== "new") return;
-  const topic = els.newTopic.value.trim().toUpperCase();
-  const category = (els.category?.value || "").trim().toUpperCase() || "TECH";
-  const slug = topic.replace(/[^A-Z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 60);
-  const el = document.getElementById("filenamePreview");
-  if (!el) return;
-  if (slug) {
-    el.textContent = `→ Will be saved as: _???_${category}__${slug}.docx`;
-    el.classList.add("has-preview");
-  } else {
-    el.textContent = "";
-    el.classList.remove("has-preview");
-  }
-}
-
-function applyFileCreationView(item, isFileCreation) {
-  const decisionStrip = document.querySelector(".decision-strip");
-  const newFields = document.querySelector(".new-fields");
-  const existingFields = document.getElementById("existingFileFields");
-  const ghostFields = document.getElementById("existingFileFieldsGhost");
-  const newFileBanner = document.getElementById("newFileBanner");
-  const currentSectionField = els.currentSection.closest(".field");
-
-  // Toggle the dedicated banner
-  els.fileCreationBanner.classList.toggle("hidden", !isFileCreation);
-
-  if (isFileCreation) {
-    // Hide all the correction-mode chrome — this is a pure generated file
-    if (decisionStrip) decisionStrip.classList.add("hidden");
-    if (newFields) newFields.classList.add("hidden");
-    if (existingFields) existingFields.classList.add("hidden");
-    if (ghostFields) ghostFields.classList.add("hidden");
-    if (newFileBanner) newFileBanner.classList.add("hidden");
-    // No "current section" for a brand new file — hide that column
-    if (currentSectionField) currentSectionField.classList.add("hidden");
-
-    // Populate filename + related-file chips
-    const filename = (item.target_file || "").replace(/.*\//, "");
-    els.fcFilename.textContent = filename || "(pending)";
-    const related = item.analysis?.cross_references?.length
-      ? item.analysis.cross_references
-      : (item.analysis?.related_files || []);
-    if (related.length) {
-      els.fcRelatedWrap.style.display = "";
-      els.fcRelatedChips.innerHTML = related
-        .map((f) => `<span class="status-chip">${escapeHtml((f || "").replace(/.*\//, ""))}</span>`)
-        .join("");
-    } else {
-      els.fcRelatedWrap.style.display = "none";
-    }
-
-    // Relabel the proposed column and give it more room
-    const proposedLabel = els.proposedReplacement.closest(".field")?.querySelector("span");
-    if (proposedLabel) proposedLabel.textContent = "Generated KB file — edit before approving";
-    els.proposedReplacement.rows = 28;
-  } else {
-    // Restore correction-mode chrome
-    if (decisionStrip) decisionStrip.classList.remove("hidden");
-    if (currentSectionField) currentSectionField.classList.remove("hidden");
-    const proposedLabel = els.proposedReplacement.closest(".field")?.querySelector("span");
-    if (proposedLabel) proposedLabel.textContent = "Proposed replacement — edit before approving";
-    els.proposedReplacement.rows = 16;
-  }
-}
-
-function renderDetail() {
-  const item = selectedCorrection();
-  if (!item) {
-    els.emptyDetail.classList.remove("hidden");
-    els.detailContent.classList.add("hidden");
-    return;
-  }
-
-  els.emptyDetail.classList.add("hidden");
-  els.detailContent.classList.remove("hidden");
-  els.detailStatus.textContent = statusLabel(item.status);
-  els.detailTitle.textContent = shortText(item.question || item.approved_answer, "Correction");
-  els.targetFile.value = item.target_file || "";
-  els.targetSection.value = item.target_section_heading || "";
-  els.newTopic.value = item.new_topic || "";
-  els.newPurpose.value = item.new_purpose || "";
-  els.currentSection.value = item.current_section || "";
-  els.proposedReplacement.value = item.proposed_replacement || item.approved_answer || "";
-  setMode(item.mode || "existing");
-
-  // File-creation requests get a dedicated presentation
-  const isFileCreation = item.request_type === "file_creation";
-  applyFileCreationView(item, isFileCreation);
-
-  // Commit link
-  els.commitLink.classList.toggle("hidden", !item.github_commit_url);
-  if (item.github_commit_url) els.commitLink.href = item.github_commit_url;
-
-  // Oasis warning
-  const oasisMissing = item.analysis?.oasis_link_missing === true;
-  els.oasisWarning.classList.toggle("hidden", !oasisMissing);
-
-  // KB Editor reasoning
-  const reasoning = item.analysis?.llm_reasoning || item.analysis?.reasoning;
-  if (reasoning) {
-    els.reasoningBlock.style.display = "flex";
-    els.reasoningText.textContent = reasoning;
-  } else {
-    els.reasoningBlock.style.display = "none";
-  }
-
-  // Multi-target vs single-target diff
-  const targets = item.targets;
-  const isMultiTarget = Array.isArray(targets) && targets.length > 1;
-  const singleTargetArea = document.getElementById("singleTargetArea");
-  const multiTargetArea = document.getElementById("multiTargetArea");
-  if (singleTargetArea) singleTargetArea.classList.toggle("hidden", isMultiTarget);
-  if (multiTargetArea) multiTargetArea.classList.toggle("hidden", !isMultiTarget);
-  if (isMultiTarget) {
-    renderTargetCards(targets);
-    els.openConfirm.textContent = `Approve Files →`;
-  } else {
-    els.openConfirm.textContent = `Approve Update →`;
-  }
-
-  // Reject note row — show when reviewing, hide when already rejected
-  const isRejected = item.status === "rejected";
-  els.rejectNoteRow.classList.toggle("hidden", isRejected);
-  els.rejectBtn.classList.toggle("hidden", isRejected);
-
-  // Resubmit — only show on rejected items
-  els.resubmitBtn.classList.toggle("hidden", !isRejected);
-  if (isRejected && item.failure_reason) {
-    els.rejectNote.value = item.failure_reason;
-  } else {
-    els.rejectNote.value = "";
-  }
-
-  // Applied actions — download + copy for chatbase
-  const isApplied = item.status === "applied";
-  const appliedRow = document.getElementById("copyForChatbaseRow");
-  if (appliedRow) appliedRow.classList.toggle("hidden", !isApplied);
-
-  // Button states
-  const canApprove = ["analysis_ready", "needs_review", "failed"].includes(item.status);
-  const canReject = ["analysis_ready", "needs_review", "submitted", "failed"].includes(item.status);
-  els.openConfirm.disabled = !canApprove;
-  els.openConfirm.classList.toggle("hidden", isRejected || isApplied);
-  els.rejectBtn.disabled = !canReject;
-  els.saveDraft.disabled = isRejected || isApplied;
-}
-
-// ── MULTI-TARGET REVIEW ───────────────────────────────────────────────────
-
-function renderTargetCards(targets) {
-  const container = document.getElementById("targetCardList");
-  const countEl = document.getElementById("multiTargetCount");
-  if (!container) return;
-  if (countEl) countEl.textContent = `${targets.length} files`;
-
-  container.innerHTML = targets.map((t, i) => {
-    const conf = t.confidence || "Low";
-    const confClass = conf === "High" ? "applied" : conf === "Medium" ? "approved" : "needs_review";
-    const isIncluded = t.status !== "skipped";
-    const fname = (t.file || "").replace(/.*\//, "");
-    return `
-      <div class="target-card" data-index="${i}">
-        <div class="target-card-header">
-          <label class="target-include-label">
-            <input type="checkbox" class="target-checkbox" data-index="${i}" ${isIncluded ? "checked" : ""} />
-            <span class="target-filename">${escapeHtml(fname)}</span>
-          </label>
-          <span class="status-chip ${confClass}">${escapeHtml(conf)}</span>
-        </div>
-        ${t.section_heading ? `<div class="target-section-name">${escapeHtml(t.section_heading)}</div>` : ""}
-        ${t.reasoning ? `<div class="target-reasoning">${escapeHtml(t.reasoning)}</div>` : ""}
-        <details class="target-diff-toggle">
-          <summary>View / edit diff</summary>
-          <div class="diff-grid" style="margin-top:10px">
-            <div class="field">
-              <span class="label" style="display:block;margin-bottom:4px">Current</span>
-              <pre class="diff-box readonly-diff">${escapeHtml(t.current_section || "(no content)")}</pre>
-            </div>
-            <div class="field">
-              <span class="label" style="display:block;margin-bottom:4px">Proposed — edit if needed</span>
-              <textarea class="diff-box editable-diff" data-target-index="${i}" rows="10">${escapeHtml(t.proposed_replacement || "")}</textarea>
-            </div>
-          </div>
-        </details>
-      </div>
-    `;
-  }).join("");
-
-  updateMultiTargetApproveCount(targets);
-
-  container.querySelectorAll(".target-checkbox").forEach((cb) => {
-    cb.addEventListener("change", () => updateMultiTargetApproveCount(targets));
-  });
-}
-
-function updateMultiTargetApproveCount(targets) {
-  const checked = document.querySelectorAll(".target-checkbox:checked").length;
-  if (els.openConfirm) {
-    els.openConfirm.textContent = `Approve ${checked} of ${targets.length} Files →`;
-    els.openConfirm.disabled = checked === 0;
-  }
-}
-
-async function saveMultiTargetApproval(updatedTargets) {
-  const item = selectedCorrection();
-  if (!item) return;
-  setSync("Saving");
-  const { error } = await supabaseClient
-    .from("apollo_corrections")
-    .update({ targets: updatedTargets, status: "approved" })
-    .eq("id", item.id);
-  if (error) throw error;
-  setSync("Ready", true);
-  const count = updatedTargets.filter((t) => t.status === "approved").length;
-  showToast(`${count} file${count > 1 ? "s" : ""} approved — automation will apply shortly.`, "success");
-  await loadCorrections();
-}
-
-// ── PATCH NOTES ───────────────────────────────────────────────────────────
-
-async function downloadPatchNotes() {
-  const btn = document.getElementById("patchNotesBtn");
-  if (btn) { btn.disabled = true; btn.textContent = "Generating…"; }
-  try {
-    const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-    const { data, error } = await supabaseClient
-      .from("apollo_corrections")
-      .select("*")
-      .eq("status", "applied")
-      .gte("applied_at", since)
-      .order("applied_at", { ascending: true });
-    if (error) throw error;
-    if (!data || data.length === 0) {
-      showToast("No corrections applied in the last 7 days.");
-      return;
-    }
-    const { data: fnData, error: fnError } = await supabaseClient.functions.invoke("generate-patch-notes", {
-      body: { corrections: data },
-    });
-    if (fnError) throw fnError;
-    if (!fnData || !fnData.ok) throw new Error((fnData && fnData.error) || "Patch notes generation failed.");
-    const date = new Date().toISOString().slice(0, 10);
-    triggerDownload(fnData.patch_notes || "", `Apollo_Patch_Notes_${date}.txt`);
-    showToast("Patch notes downloaded!", "success");
-  } catch (err) {
-    showToast(`Patch notes error: ${err.message}`);
-  } finally {
-    if (btn) { btn.disabled = false; btn.textContent = "Download Patch Notes (Last 7 Days)"; }
-  }
-}
-
-// ── LOAD ──────────────────────────────────────────────────────────────────
-
-async function loadCorrections() {
-  setSync("Loading");
-  const statuses = els.statusFilter.value.split(",");
-  const { data, error } = await supabaseClient
-    .from("apollo_corrections")
-    .select("*")
-    .in("status", statuses)
-    .order("created_at", { ascending: false })
-    .limit(100);
-  if (error) throw error;
-  state.corrections = data || [];
-  renderQueue();
-  setSync("Ready", true);
-}
-
-// ── AUTOMATION ────────────────────────────────────────────────────────────
-
-async function runAutomationNow() {
-  setSync("Triggering");
-  els.runAutomation.disabled = true;
-  try {
-    const { data, error } = await supabaseClient.functions.invoke("run-kb-automation", {
-      body: { source: "apollo-portal" },
-    });
-    if (error) throw error;
-    if (data && data.ok === false) throw new Error(data.error || "Automation trigger failed.");
-    setSync("Queued");
-    showToast("KB automation queued. Refresh in a minute or two.", "success");
-  } finally {
-    window.setTimeout(() => {
-      els.runAutomation.disabled = false;
-      setSync("Ready", true);
-    }, 2500);
-  }
-}
-
-// ── SAVE / APPROVE ────────────────────────────────────────────────────────
-
-async function saveSelected(statusOverride = null) {
-  const item = selectedCorrection();
-  if (!item) return;
-
-  let update;
-  if (item.request_type === "file_creation") {
-    // For generated files, only the content is editable — keep filename/topic intact
-    update = {
-      proposed_replacement: els.proposedReplacement.value.trim(),
-    };
-  } else {
-    update = {
-      mode: state.mode,
-      target_file: els.targetFile.value.trim() || null,
-      target_section_heading: els.targetSection.value.trim() || null,
-      current_section: els.currentSection.value,
-      proposed_replacement: els.proposedReplacement.value.trim(),
-      new_topic: els.newTopic.value.trim(),
-      new_purpose: els.newPurpose.value.trim(),
-    };
-  }
-  if (statusOverride) update.status = statusOverride;
-
-  setSync("Saving");
-  const { error } = await supabaseClient.from("apollo_corrections").update(update).eq("id", item.id);
-  if (error) throw error;
-  setSync("Ready", true);
-  showToast(statusOverride === "approved" ? "Correction approved — automation will apply it shortly." : "Draft saved.", "success");
-  await loadCorrections();
-}
-
-function openConfirm() {
-  const item = selectedCorrection();
-  if (!item) return;
-
-  // File-creation approval — simplest path
-  if (item.request_type === "file_creation") {
-    if (!els.proposedReplacement.value.trim()) {
-      showToast("The generated file is empty — nothing to approve.");
-      return;
-    }
-    state.pendingMultiTargets = null;
-    const filename = (item.target_file || "the new file").replace(/.*\//, "");
-    els.confirmText.textContent = `This will create ${filename} and commit it to GitHub. It will be indexed so future corrections can route to it.`;
-    els.reviewedCheck.checked = false;
-    els.confirmApprove.disabled = true;
-    els.confirmLayer.classList.remove("hidden");
-    return;
-  }
-
-  const targets = item.targets;
-  const isMultiTarget = Array.isArray(targets) && targets.length > 1;
-
-  if (isMultiTarget) {
-    // Build updated targets from current checkbox + textarea state
-    const updatedTargets = targets.map((t, i) => {
-      const checkbox = document.querySelector(`.target-checkbox[data-index="${i}"]`);
-      const textarea = document.querySelector(`[data-target-index="${i}"]`);
-      return {
-        ...t,
-        proposed_replacement: textarea ? textarea.value.trim() : t.proposed_replacement,
-        status: checkbox && checkbox.checked ? "approved" : "skipped",
-      };
-    });
-    const approvedCount = updatedTargets.filter((t) => t.status === "approved").length;
-    if (approvedCount === 0) {
-      showToast("Select at least one file to approve.");
-      return;
-    }
-    state.pendingMultiTargets = updatedTargets;
-    els.confirmText.textContent = `This will queue ${approvedCount} file update${approvedCount > 1 ? "s" : ""}. GitHub Actions will apply all changes in one commit.`;
-  } else {
-    if (!els.proposedReplacement.value.trim()) {
-      showToast("Add proposed replacement guidance before approving.");
-      return;
-    }
-    if (state.mode === "existing" && (!els.targetFile.value.trim() || !els.targetSection.value.trim())) {
-      showToast("Existing file updates need a target file and section heading.");
-      return;
-    }
-    state.pendingMultiTargets = null;
-    if (state.mode === "new" && !els.newTopic.value.trim()) {
-      showToast("Add a 'New file topic' before approving — this becomes the filename.");
-      els.newTopic.focus();
-      return;
-    }
-    const target = state.mode === "new"
-      ? `a new KB file: ${els.newTopic.value.trim()}`
-      : `${els.targetFile.value.trim()} — ${els.targetSection.value.trim()}`;
-    els.confirmText.textContent = `This will mark the correction approved. GitHub Actions will update ${target} and commit the changed KB file.`;
-  }
-
-  els.reviewedCheck.checked = false;
-  els.confirmApprove.disabled = true;
-  els.confirmLayer.classList.remove("hidden");
-}
-
-// ── REJECT ────────────────────────────────────────────────────────────────
+            <span class="status-chip ${escapeHtml(item.sta…8725 tokens truncated…â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 async function rejectSelected() {
   const item = selectedCorrection();
@@ -846,7 +442,7 @@ async function rejectSelected() {
   await loadCorrections();
 }
 
-// ── RESUBMIT ──────────────────────────────────────────────────────────────
+// â”€â”€ RESUBMIT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function resubmitSelected() {
   const item = selectedCorrection();
@@ -861,10 +457,10 @@ function resubmitSelected() {
   // Switch to submit tab and focus on approved answer
   switchToView("submit");
   els.approvedAnswer.focus();
-  showToast("Form pre-filled from rejected correction — add your updated guidance and resubmit.");
+  showToast("Form pre-filled from rejected correction â€” add your updated guidance and resubmit.");
 }
 
-// ── COPY FOR CHATBASE ─────────────────────────────────────────────────────
+// â”€â”€ COPY FOR CHATBASE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 async function copyForChatbase() {
   const item = selectedCorrection();
@@ -873,7 +469,7 @@ async function copyForChatbase() {
     return;
   }
   els.copyForChatbase.disabled = true;
-  els.copyForChatbase.textContent = "Fetching file…";
+  els.copyForChatbase.textContent = "Fetching fileâ€¦";
   try {
     const url = `${GITHUB_RAW_BASE}${item.target_file}`;
     const response = await fetch(url);
@@ -881,9 +477,9 @@ async function copyForChatbase() {
     const arrayBuffer = await response.arrayBuffer();
     const result = await mammoth.extractRawText({ arrayBuffer });
     const text = result.value.trim();
-    if (!text) throw new Error("Extracted text was empty — file may not be readable.");
+    if (!text) throw new Error("Extracted text was empty â€” file may not be readable.");
     await navigator.clipboard.writeText(text);
-    showToast(`Copied full file (${item.target_file.split("/").pop()}) to clipboard — paste into Chatbase.`, "success");
+    showToast(`Copied full file (${item.target_file.split("/").pop()}) to clipboard â€” paste into Chatbase.`, "success");
   } catch (err) {
     showToast(`Could not copy file: ${err.message}`);
   } finally {
@@ -892,7 +488,7 @@ async function copyForChatbase() {
   }
 }
 
-// ── DOWNLOAD FILE (single correction's full source file) ──────────────────
+// â”€â”€ DOWNLOAD FILE (single correction's full source file) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 async function downloadUpdatedFile() {
   const item = selectedCorrection();
@@ -901,7 +497,7 @@ async function downloadUpdatedFile() {
     return;
   }
   els.downloadFile.disabled = true;
-  els.downloadFile.textContent = "Fetching file…";
+  els.downloadFile.textContent = "Fetching fileâ€¦";
   try {
     const url = `${GITHUB_RAW_BASE}${item.target_file}`;
     const response = await fetch(url);
@@ -921,12 +517,12 @@ async function downloadUpdatedFile() {
   }
 }
 
-// ── SINGLE FILE DOWNLOAD / COPY (from Activity tab) ──────────────────────
+// â”€â”€ SINGLE FILE DOWNLOAD / COPY (from Activity tab) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 async function downloadFileByPath(filePath, btn) {
   const original = btn.textContent;
   btn.disabled = true;
-  btn.textContent = "Fetching…";
+  btn.textContent = "Fetchingâ€¦";
   try {
     const resp = await fetch(`${GITHUB_RAW_BASE}${filePath}`);
     if (!resp.ok) throw new Error(`GitHub returned ${resp.status}`);
@@ -948,7 +544,7 @@ async function downloadFileByPath(filePath, btn) {
 async function copyFileByPath(filePath, btn) {
   const original = btn.textContent;
   btn.disabled = true;
-  btn.textContent = "Copying…";
+  btn.textContent = "Copyingâ€¦";
   try {
     const resp = await fetch(`${GITHUB_RAW_BASE}${filePath}`);
     if (!resp.ok) throw new Error(`GitHub returned ${resp.status}`);
@@ -966,7 +562,7 @@ async function copyFileByPath(filePath, btn) {
   }
 }
 
-// ── KB EXPORT HELPERS ─────────────────────────────────────────────────────
+// â”€â”€ KB EXPORT HELPERS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function triggerDownload(text, filename) {
   const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
@@ -1038,19 +634,19 @@ async function fetchExtractBatch(paths, batchSize, onProgress) {
   return results;
 }
 
-// ── DOWNLOAD FULL KB AS ZIP ───────────────────────────────────────────────
+// â”€â”€ DOWNLOAD FULL KB AS ZIP â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 async function downloadKBZip() {
   const btn = document.getElementById("downloadKBZip");
   btn.disabled = true;
-  btn.textContent = "Preparing…";
+  btn.textContent = "Preparingâ€¦";
   try {
-    setExportProgress(0, 1, "Fetching file list from GitHub…");
+    setExportProgress(0, 1, "Fetching file list from GitHubâ€¦");
     const files = await getKBFileList();
     const zip = new JSZip();
     const folder = zip.folder("Apollo_KB");
     const results = await fetchExtractBatch(files, 8, (done, total) => {
-      setExportProgress(done, total, `Extracting ${done} of ${total} files…`);
+      setExportProgress(done, total, `Extracting ${done} of ${total} filesâ€¦`);
     });
 
     let extracted = 0;
@@ -1066,7 +662,7 @@ async function downloadKBZip() {
       }
     }
 
-    setExportProgress(1, 1, "Building ZIP…");
+    setExportProgress(1, 1, "Building ZIPâ€¦");
     const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE" });
     const date = new Date().toISOString().slice(0, 10);
     triggerBlobDownload(blob, `Apollo_KB_${date}.zip`);
@@ -1081,17 +677,17 @@ async function downloadKBZip() {
   }
 }
 
-// ── DOWNLOAD MERGED KB (single .txt) ─────────────────────────────────────
+// â”€â”€ DOWNLOAD MERGED KB (single .txt) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 async function downloadKBMerged() {
   const btn = document.getElementById("downloadKBMerged");
   btn.disabled = true;
-  btn.textContent = "Preparing…";
+  btn.textContent = "Preparingâ€¦";
   try {
-    setExportProgress(0, 1, "Fetching file list from GitHub…");
+    setExportProgress(0, 1, "Fetching file list from GitHubâ€¦");
     const files = await getKBFileList();
     const results = await fetchExtractBatch(files, 8, (done, total) => {
-      setExportProgress(done, total, `Extracting ${done} of ${total} files…`);
+      setExportProgress(done, total, `Extracting ${done} of ${total} filesâ€¦`);
     });
 
     const divider = "=".repeat(80);
@@ -1114,13 +710,16 @@ async function downloadKBMerged() {
   }
 }
 
-// ── EVENT LISTENERS ───────────────────────────────────────────────────────
+// â”€â”€ EVENT LISTENERS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 document.querySelectorAll(".nav-item").forEach((button) => {
   button.addEventListener("click", () => {
     switchToView(button.dataset.view);
     if (button.dataset.view === "activity") {
       loadActivity().catch((err) => showToast(err.message));
+    }
+    if (button.dataset.view === "maintenance") {
+      loadMaintenance().catch((err) => showToast(err.message));
     }
   });
 });
@@ -1200,8 +799,12 @@ els.downloadFile.addEventListener("click", () => downloadUpdatedFile().catch((er
 document.getElementById("downloadKBZip").addEventListener("click", () => downloadKBZip().catch((err) => showToast(err.message)));
 document.getElementById("downloadKBMerged").addEventListener("click", () => downloadKBMerged().catch((err) => showToast(err.message)));
 document.getElementById("patchNotesBtn").addEventListener("click", () => downloadPatchNotes().catch((err) => showToast(err.message)));
+els.confirmMaintenance.addEventListener("click", () => confirmWeeklyMaintenance().catch((err) => showToast(err.message)));
+els.refreshMaintenance.addEventListener("click", () => loadMaintenance().catch((err) => showToast(err.message)));
+els.maintenanceCompletedBy.addEventListener("input", persistMaintenanceDraft);
+els.maintenanceNotes.addEventListener("input", persistMaintenanceDraft);
 
-// ── LAST EDITED DATE ──────────────────────────────────────────────────────
+// â”€â”€ LAST EDITED DATE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 async function loadLastEdited() {
   try {
@@ -1214,17 +817,20 @@ async function loadLastEdited() {
     if (isNaN(date)) return;
     const formatted = date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
     const el = document.getElementById("lastEditedLabel");
-    if (el) el.textContent = `Last edited by Danielle Beram · ${formatted}`;
+    if (el) el.textContent = `Last edited by Danielle Beram Â· ${formatted}`;
   } catch {
-    // silently fail — label stays as static text
+    // silently fail â€” label stays as static text
   }
 }
 
-// ── INIT ──────────────────────────────────────────────────────────────────
+// â”€â”€ INIT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 renderBatch();
+renderMaintenanceChecklist();
+renderMaintenanceWeekStatus(readMaintenanceStore().records || []);
 loadLastEdited();
 loadCorrections().catch((error) => {
   setSync("Needs attention");
   showToast(error.message);
 });
+
