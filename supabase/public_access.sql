@@ -41,3 +41,30 @@ with check (
 );
 
 grant select, insert, update on public.apollo_corrections to anon, authenticated;
+
+alter table public.apollo_maintenance_runs enable row level security;
+
+drop policy if exists "Public prototype can read maintenance runs" on public.apollo_maintenance_runs;
+create policy "Public prototype can read maintenance runs"
+on public.apollo_maintenance_runs
+for select
+to anon, authenticated
+using (true);
+
+drop policy if exists "Public prototype can log maintenance runs" on public.apollo_maintenance_runs;
+create policy "Public prototype can log maintenance runs"
+on public.apollo_maintenance_runs
+for insert
+to anon, authenticated
+with check (true);
+
+drop policy if exists "Public prototype can update maintenance runs" on public.apollo_maintenance_runs;
+create policy "Public prototype can update maintenance runs"
+on public.apollo_maintenance_runs
+for update
+to anon, authenticated
+using (true)
+with check (true);
+
+grant select, insert, update on public.apollo_maintenance_runs to anon, authenticated;
+
