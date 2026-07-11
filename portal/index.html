@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Apollo KB Portal â€” Sandbox VR</title>
+    <title>Apollo KB Portal — Sandbox VR</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link href="https://fonts.googleapis.com/css2?family=Gordita:wght@400;500;700;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="./styles.css" />
@@ -11,7 +11,7 @@
   <body>
     <div class="app-shell">
 
-      <!-- â”€â”€ SIDEBAR â”€â”€ -->
+      <!-- ── SIDEBAR ── -->
       <aside class="rail">
         <div class="brand">
           <img src="./logo.png" alt="Sandbox VR" class="sidebar-logo" onerror="this.style.display='none'" />
@@ -47,13 +47,13 @@
         </div>
       </aside>
 
-      <!-- â”€â”€ MAIN WORKSPACE â”€â”€ -->
+      <!-- ── MAIN WORKSPACE ── -->
       <main class="workspace">
 
         <header class="topbar">
           <div>
             <h1>Apollo Correction Portal</h1>
-            <div class="topbar-sub">Submit a bad answer Â· Review KB edits Â· Approve to publish</div>
+            <div class="topbar-sub">Submit a bad answer · Review KB edits · Approve to publish</div>
           </div>
           <div class="top-actions">
             <button class="button secondary compact" id="runAutomation" type="button">Run Automation Now</button>
@@ -61,7 +61,7 @@
           </div>
         </header>
 
-        <!-- â”€â”€ SUBMIT VIEW â”€â”€ -->
+        <!-- ── SUBMIT VIEW ── -->
         <section class="view active" id="submitView">
           <div class="layout-grid">
 
@@ -148,55 +148,55 @@
                 <span class="rule"></span>
               </div>
 
-              <p class="guide-intro">Apollo is Sandbox VR's internal AI agent, powered by a library of Knowledge Base (KB) files uploaded to Chatbase. When Apollo gives a wrong answer, this portal is how we fix it â€” submit the bad answer, let the AI editor draft a clean KB rewrite, review and approve it, then push the updated file back to Chatbase. No manual file editing required.</p>
+              <p class="guide-intro">Apollo is Sandbox VR's internal AI agent, powered by a library of Knowledge Base (KB) files uploaded to Chatbase. When Apollo gives a wrong answer, this portal is how we fix it — submit the bad answer, let the AI editor draft a clean KB rewrite, review and approve it, then push the updated file back to Chatbase. No manual file editing required.</p>
 
               <div class="guide-section">
-                <div class="guide-section-label">The Workflow â€” in order</div>
+                <div class="guide-section-label">The Workflow — in order</div>
                 <ol class="guide-steps">
-                  <li><strong>Submit</strong> â€” Paste the question, Apollo's wrong answer, and the correct guidance. Add the Oasis SOP link if the topic has one. Hit <em>Submit Single</em> or queue up several and hit <em>Submit Batch</em>.</li>
-                  <li><strong>Wait for Analysis</strong> â€” The Apollo KB Editor bot (a dedicated Chatbase agent) reads the correction and drafts a clean rewrite of the relevant KB section. This runs automatically every 10 minutes, or hit <em>Run Automation Now</em> to trigger it immediately.</li>
-                  <li><strong>Review</strong> â€” Go to the <em>Review Queue</em> tab. Corrections marked <span class="inline-chip analysis_ready">analysis ready</span> are ready to approve. Ones marked <span class="inline-chip needs_review">needs review</span> need a closer look â€” usually a missing Oasis link or low confidence match.</li>
-                  <li><strong>Approve or Reject</strong> â€” Read the before/after diff. Edit the proposed replacement if needed. If it looks good, click <em>Approve Update</em>. If it's wrong, add a rejection reason and click <em>Reject</em> â€” you can resubmit with better info.</li>
-                  <li><strong>Apply</strong> â€” Approved corrections are picked up automatically and written to the KB file in GitHub. The correction flips to <span class="inline-chip applied">applied</span>.</li>
-                  <li><strong>Push to Chatbase</strong> â€” Once applied, use <em>Copy for Chatbase</em> or <em>Download File</em> to get the updated file, then upload it to Chatbase (see below).</li>
+                  <li><strong>Submit</strong> — Paste the question, Apollo's wrong answer, and the correct guidance. Add the Oasis SOP link if the topic has one. Hit <em>Submit Single</em> or queue up several and hit <em>Submit Batch</em>.</li>
+                  <li><strong>Wait for Analysis</strong> — The Apollo KB Editor bot (a dedicated Chatbase agent) reads the correction and drafts a clean rewrite of the relevant KB section. This runs automatically every 10 minutes, or hit <em>Run Automation Now</em> to trigger it immediately.</li>
+                  <li><strong>Review</strong> — Go to the <em>Review Queue</em> tab. Corrections marked <span class="inline-chip analysis_ready">analysis ready</span> are ready to approve. Ones marked <span class="inline-chip needs_review">needs review</span> need a closer look — usually a missing Oasis link or low confidence match.</li>
+                  <li><strong>Approve or Reject</strong> — Read the before/after diff. Edit the proposed replacement if needed. If it looks good, click <em>Approve Update</em>. If it's wrong, add a rejection reason and click <em>Reject</em> — you can resubmit with better info.</li>
+                  <li><strong>Apply</strong> — Approved corrections are picked up automatically and written to the KB file in GitHub. The correction flips to <span class="inline-chip applied">applied</span>.</li>
+                  <li><strong>Push to Chatbase</strong> — Once applied, use <em>Copy for Chatbase</em> or <em>Download File</em> to get the updated file, then upload it to Chatbase (see below).</li>
                 </ol>
               </div>
 
               <div class="guide-section">
-                <div class="guide-section-label">Tips â€” Writing Good Corrections</div>
+                <div class="guide-section-label">Tips — Writing Good Corrections</div>
                 <ul class="guide-tips">
-                  <li>Paste Apollo's exact wrong answer â€” the more specific, the better the AI editor's rewrite.</li>
+                  <li>Paste Apollo's exact wrong answer — the more specific, the better the AI editor's rewrite.</li>
                   <li>Approved guidance should be what Apollo <em>should</em> say, written the way you'd want to see it in the KB. The AI will use your words as a starting point.</li>
                   <li>Always include an Oasis SOP link for any procedural topic. Corrections without one get flagged <em>needs review</em> and can't be auto-approved.</li>
                   <li>Keep one correction per issue. Don't combine two unrelated problems into one submission.</li>
-                  <li>Add reviewer notes for edge cases â€” e.g. "This only applies to TactSuit Pro, not X40."</li>
+                  <li>Add reviewer notes for edge cases — e.g. "This only applies to TactSuit Pro, not X40."</li>
                 </ul>
               </div>
 
               <div class="guide-section">
-                <div class="guide-section-label">Tips â€” Batching Corrections</div>
+                <div class="guide-section-label">Tips — Batching Corrections</div>
                 <ul class="guide-tips">
                   <li>Use <em>Add to Batch</em> to queue multiple corrections, then submit them all at once. Great for post-stress-test cleanup sessions.</li>
-                  <li>Batch by category when possible â€” all TECH corrections together, all OPERATIONS together â€” so the review queue stays organized.</li>
+                  <li>Batch by category when possible — all TECH corrections together, all OPERATIONS together — so the review queue stays organized.</li>
                   <li>Review batch corrections together in one sitting. It's faster to approve 8 corrections in a row than to come back to each one individually.</li>
                 </ul>
               </div>
 
               <div class="guide-section">
-                <div class="guide-section-label">Pushing Updates to Chatbase â€” The Full Flow</div>
+                <div class="guide-section-label">Pushing Updates to Chatbase — The Full Flow</div>
                 <p style="font-size:13px;color:var(--text-secondary);margin-bottom:10px;line-height:1.6">After approving a correction, follow these four steps to get it live in Apollo:</p>
                 <ol class="guide-steps">
                   <li>
-                    <strong>Apollo KB Update Tool</strong> â€” The correction is submitted and analyzed here. Once approved, GitHub automatically rewrites the KB file. The correction flips to <span class="inline-chip applied">applied</span>.
+                    <strong>Apollo KB Update Tool</strong> — The correction is submitted and analyzed here. Once approved, GitHub automatically rewrites the KB file. The correction flips to <span class="inline-chip applied">applied</span>.
                   </li>
                   <li>
-                    <strong>Approve correction or create new file</strong> â€” In the Review Queue, read the before/after diff, edit if needed, and click <em>Approve Update</em>. If the tool can't find the right file, use <em>Create new file</em> â€” the new file will be indexed and available for future corrections automatically.
+                    <strong>Approve correction or create new file</strong> — In the Review Queue, read the before/after diff, edit if needed, and click <em>Approve Update</em>. If the tool can't find the right file, use <em>Create new file</em> — the new file will be indexed and available for future corrections automatically.
                   </li>
                   <li>
-                    <strong>Sync to Google Drive backup</strong> â€” Once applied, go to the Activity Log and click <strong>Download File</strong> (or Copy for Chatbase) to get the updated file. Upload it to the <a href="https://drive.google.com/drive/folders/1pQG6w3ULaVLISXXyq68X3SB2KkisKO32?usp=drive_link" target="_blank" rel="noreferrer" class="guide-link">Apollo KB Google Drive folder</a>. Check the <strong>Synced to Drive</strong> checkbox in the Activity Log so you know it's backed up.
+                    <strong>Sync to Google Drive backup</strong> — Once applied, go to the Activity Log and click <strong>Download File</strong> (or Copy for Chatbase) to get the updated file. Upload it to the <a href="https://drive.google.com/drive/folders/1pQG6w3ULaVLISXXyq68X3SB2KkisKO32?usp=drive_link" target="_blank" rel="noreferrer" class="guide-link">Apollo KB Google Drive folder</a>. Check the <strong>Synced to Drive</strong> checkbox in the Activity Log so you know it's backed up.
                   </li>
                   <li>
-                    <strong>Download from Drive and replace on Chatbase</strong> â€” Go to the <a href="https://drive.google.com/drive/folders/1pQG6w3ULaVLISXXyq68X3SB2KkisKO32?usp=drive_link" target="_blank" rel="noreferrer" class="guide-link">Google Drive folder</a>, download the updated file, then go to <a href="https://www.chatbase.co/dashboard/kenneth-nguyens-workspace/chatbot/BrVzc5S6s2jNu5RTcT5kx/sources/files" target="_blank" rel="noreferrer" class="guide-link">Chatbase â†’ Sources â†’ Files</a>. Search for the file by number (e.g. <code>_70_</code>), delete the old version, upload the new one, and click <strong>Retrain</strong>. Check the <strong>Synced to Chatbase</strong> checkbox in the Activity Log when done. Do this in batches for consistency.
+                    <strong>Download from Drive and replace on Chatbase</strong> — Go to the <a href="https://drive.google.com/drive/folders/1pQG6w3ULaVLISXXyq68X3SB2KkisKO32?usp=drive_link" target="_blank" rel="noreferrer" class="guide-link">Google Drive folder</a>, download the updated file, then go to <a href="https://www.chatbase.co/dashboard/kenneth-nguyens-workspace/chatbot/BrVzc5S6s2jNu5RTcT5kx/sources/files" target="_blank" rel="noreferrer" class="guide-link">Chatbase → Sources → Files</a>. Search for the file by number (e.g. <code>_70_</code>), delete the old version, upload the new one, and click <strong>Retrain</strong>. Check the <strong>Synced to Chatbase</strong> checkbox in the Activity Log when done. Do this in batches for consistency.
                   </li>
                 </ol>
               </div>
@@ -205,9 +205,9 @@
                 <div class="guide-section-label">Exporting the Full KB</div>
                 <ul class="guide-tips">
                   <li>Go to the <strong>Activity Log</strong> tab to find the export buttons.</li>
-                  <li><strong>Download Full KB (ZIP)</strong> â€” downloads every KB file as a <code>.txt</code>, zipped. Use this to retrain Apollo from scratch, back up the full catalogue, or share the current KB with someone.</li>
-                  <li><strong>Download Merged KB (single file)</strong> â€” all KB files concatenated into one <code>.txt</code>. Perfect for training a Gemini Gem, generating patch notes, or giving a new team member a full picture of what Apollo knows.</li>
-                  <li>Both exports pull the latest committed versions from GitHub â€” always up to date with approved corrections.</li>
+                  <li><strong>Download Full KB (ZIP)</strong> — downloads every KB file as a <code>.txt</code>, zipped. Use this to retrain Apollo from scratch, back up the full catalogue, or share the current KB with someone.</li>
+                  <li><strong>Download Merged KB (single file)</strong> — all KB files concatenated into one <code>.txt</code>. Perfect for training a Gemini Gem, generating patch notes, or giving a new team member a full picture of what Apollo knows.</li>
+                  <li>Both exports pull the latest committed versions from GitHub — always up to date with approved corrections.</li>
                 </ul>
               </div>
 
@@ -216,7 +216,7 @@
           </div>
         </section>
 
-        <!-- â”€â”€ CREATE KB FILE VIEW â”€â”€ -->
+        <!-- ── CREATE KB FILE VIEW ── -->
         <section class="view" id="createFileView">
           <div class="layout-grid">
 
@@ -241,7 +241,7 @@
                 <label class="field">
                   <span>Category <span style="color:var(--danger)">*</span></span>
                   <select id="cfCategory">
-                    <option value="">Select a categoryâ€¦</option>
+                    <option value="">Select a category…</option>
                     <option>TECH</option>
                     <option>OPERATIONS</option>
                     <option>POLICY</option>
@@ -263,7 +263,7 @@
               <label class="field">
                 <span>What should this file cover? <span style="color:var(--danger)">*</span></span>
                 <textarea id="cfDescription" rows="6" placeholder="Describe the topic in detail. What does Apollo need to know? Include any rules, steps, approvals, edge cases, and things Apollo should NOT do. The more detail, the more comprehensive the file."></textarea>
-                <span class="field-hint">The AI auto-detects which existing files relate â€” you don't need to list them.</span>
+                <span class="field-hint">The AI auto-detects which existing files relate — you don't need to list them.</span>
               </label>
 
               <label class="field">
@@ -273,7 +273,7 @@
               </label>
 
               <div class="button-row">
-                <button class="button primary" type="submit">Generate New KB File â†’</button>
+                <button class="button primary" type="submit">Generate New KB File →</button>
                 <button class="button quiet" id="cfClear" type="button">Clear</button>
               </div>
             </form>
@@ -287,21 +287,21 @@
               <div class="guide-section">
                 <div class="guide-section-label">The Flow</div>
                 <ol class="guide-steps">
-                  <li><strong>Describe the topic</strong> â€” Fill in the topic, category, and a detailed description of what the file should cover.</li>
-                  <li><strong>AI drafts the file</strong> â€” The Apollo KB File Creator reads the whole KB, writes a comprehensive 8â€“12 section file, and links related files automatically. Runs every 10 minutes, or hit <em>Run Automation Now</em> in the Review Queue.</li>
-                  <li><strong>Review</strong> â€” The draft appears in the <em>Review Queue</em> marked <span class="inline-chip needs_review">needs review</span>. Read the generated content, check the auto-detected related files, and edit anything.</li>
-                  <li><strong>Approve</strong> â€” Click <em>Approve</em>. The new file is numbered, committed to GitHub, and indexed so future corrections can route to it.</li>
-                  <li><strong>Sync to Chatbase</strong> â€” Download it from the Activity Log and upload to Chatbase, same as any correction.</li>
+                  <li><strong>Describe the topic</strong> — Fill in the topic, category, and a detailed description of what the file should cover.</li>
+                  <li><strong>AI drafts the file</strong> — The Apollo KB File Creator reads the whole KB, writes a comprehensive 8–12 section file, and links related files automatically. Runs every 10 minutes, or hit <em>Run Automation Now</em> in the Review Queue.</li>
+                  <li><strong>Review</strong> — The draft appears in the <em>Review Queue</em> marked <span class="inline-chip needs_review">needs review</span>. Read the generated content, check the auto-detected related files, and edit anything.</li>
+                  <li><strong>Approve</strong> — Click <em>Approve</em>. The new file is numbered, committed to GitHub, and indexed so future corrections can route to it.</li>
+                  <li><strong>Sync to Chatbase</strong> — Download it from the Activity Log and upload to Chatbase, same as any correction.</li>
                 </ol>
               </div>
 
               <div class="guide-section">
                 <div class="guide-section-label">Tips for a Great File</div>
                 <ul class="guide-tips">
-                  <li>Be specific in the description â€” list the rules, the steps, who approves what, and the edge cases.</li>
-                  <li>Call out anything Apollo should <em>never</em> say â€” those become DO NOT rules.</li>
-                  <li>If a detail isn't confirmed yet, say so â€” the AI will flag it as <em>[Needs Confirmation]</em> rather than guessing.</li>
-                  <li>Pick the right category â€” it helps the AI find the most relevant existing files to cross-reference.</li>
+                  <li>Be specific in the description — list the rules, the steps, who approves what, and the edge cases.</li>
+                  <li>Call out anything Apollo should <em>never</em> say — those become DO NOT rules.</li>
+                  <li>If a detail isn't confirmed yet, say so — the AI will flag it as <em>[Needs Confirmation]</em> rather than guessing.</li>
+                  <li>Pick the right category — it helps the AI find the most relevant existing files to cross-reference.</li>
                 </ul>
               </div>
             </section>
@@ -309,7 +309,7 @@
           </div>
         </section>
 
-        <!-- â”€â”€ REVIEW VIEW â”€â”€ -->
+        <!-- ── REVIEW VIEW ── -->
         <section class="view" id="reviewView">
           <div class="review-layout">
 
@@ -351,12 +351,12 @@
                     <p class="kicker" id="detailStatus">Status</p>
                     <h3 id="detailTitle">Correction</h3>
                   </div>
-                  <a id="commitLink" class="commit-link hidden" target="_blank" rel="noreferrer">View Commit â†’</a>
+                  <a id="commitLink" class="commit-link hidden" target="_blank" rel="noreferrer">View Commit →</a>
                 </div>
 
                 <!-- Oasis link missing warning -->
                 <div class="alert-banner warning hidden" id="oasisWarning">
-                  âš  No Oasis SOP link was provided. Add one before approving if this is a procedural topic.
+                  ⚠ No Oasis SOP link was provided. Add one before approving if this is a procedural topic.
                 </div>
 
                 <!-- LLM reasoning block -->
@@ -370,13 +370,13 @@
                   <button class="decision" id="modeNew" type="button">Create new file</button>
                 </div>
 
-                <!-- New file banner â€” only visible in new-file mode -->
+                <!-- New file banner — only visible in new-file mode -->
                 <div class="alert-banner new-file-banner hidden" id="newFileBanner" style="background:var(--trigger-light);border-color:var(--trigger);color:var(--text-primary);flex-direction:column;align-items:flex-start;gap:6px">
                   <strong style="font-size:12px;text-transform:uppercase;letter-spacing:0.08em;color:var(--trigger)">Creating a new KB file</strong>
-                  <span style="font-size:13px;font-weight:400">Fill in the two fields below. The <strong>Target File</strong> and <strong>Section Heading</strong> above are ignored â€” they only apply when updating an existing file.</span>
+                  <span style="font-size:13px;font-weight:400">Fill in the two fields below. The <strong>Target File</strong> and <strong>Section Heading</strong> above are ignored — they only apply when updating an existing file.</span>
                 </div>
 
-                <!-- AI-generated file-creation info â€” only for Create KB File requests -->
+                <!-- AI-generated file-creation info — only for Create KB File requests -->
                 <div class="alert-banner hidden" id="fileCreationBanner" style="background:var(--success-light);border-color:var(--success);color:#0a5f43;flex-direction:column;align-items:flex-start;gap:8px">
                   <strong style="font-size:12px;text-transform:uppercase;letter-spacing:0.08em">AI-Generated New KB File</strong>
                   <span style="font-size:13px;font-weight:400">Proposed filename: <code id="fcFilename" style="font-weight:700"></code></span>
@@ -414,7 +414,7 @@
                   <label class="field">
                     <span>New file topic <span style="color:var(--danger)">*</span></span>
                     <input id="newTopic" type="text" placeholder="e.g. SPC RACK SPACING HOLODECK" />
-                    <span class="field-hint">Required â€” becomes the filename. Describe the topic in ALL CAPS.</span>
+                    <span class="field-hint">Required — becomes the filename. Describe the topic in ALL CAPS.</span>
                     <span class="filename-preview" id="filenamePreview"></span>
                   </label>
                   <label class="field">
@@ -431,7 +431,7 @@
                       <textarea id="currentSection" rows="16" readonly style="background:var(--surface);font-family:monospace;font-size:12px"></textarea>
                     </label>
                     <label class="field">
-                      <span>Proposed replacement â€” edit before approving</span>
+                      <span>Proposed replacement — edit before approving</span>
                       <textarea id="proposedReplacement" rows="16" style="font-family:monospace;font-size:12px"></textarea>
                     </label>
                   </div>
@@ -449,7 +449,7 @@
                 <!-- Applied actions -->
                 <div class="applied-actions hidden" id="copyForChatbaseRow">
                   <div class="alert-banner" style="background:var(--success-light);border-color:var(--success);color:#0a6645;margin-bottom:14px">
-                    âœ“ This correction has been applied to the KB.
+                    ✓ This correction has been applied to the KB.
                   </div>
                   <div class="button-row" style="margin-bottom:4px">
                     <button class="button primary" id="copyForChatbase" type="button">Copy for Chatbase</button>
@@ -462,15 +462,15 @@
                 <div id="rejectNoteRow">
                   <label class="field" style="margin-top:8px">
                     <span>Rejection reason <span style="font-weight:400;text-transform:none;letter-spacing:0">(optional)</span></span>
-                    <input id="rejectNote" type="text" placeholder="e.g. Guidance needs Oasis link, wrong section targetedâ€¦" />
+                    <input id="rejectNote" type="text" placeholder="e.g. Guidance needs Oasis link, wrong section targeted…" />
                   </label>
                 </div>
 
                 <div class="button-row end">
                   <button class="button quiet" id="saveDraft" type="button">Save Draft</button>
                   <button class="button danger" id="rejectBtn" type="button">Reject</button>
-                  <button class="button secondary" id="resubmitBtn" type="button" style="display:none">Resubmit with New Info â†’</button>
-                  <button class="button primary" id="openConfirm" type="button">Approve Update â†’</button>
+                  <button class="button secondary" id="resubmitBtn" type="button" style="display:none">Resubmit with New Info →</button>
+                  <button class="button primary" id="openConfirm" type="button">Approve Update →</button>
                 </div>
               </div>
             </section>
@@ -478,7 +478,7 @@
           </div>
         </section>
 
-        <!-- â”€â”€ ACTIVITY VIEW â”€â”€ -->
+        <!-- ── ACTIVITY VIEW ── -->
         <section class="view" id="activityView">
 
           <section class="panel" style="margin-bottom:20px">
@@ -487,7 +487,7 @@
               <span class="rule"></span>
             </div>
             <p style="font-size:13px;color:var(--text-secondary);margin-bottom:16px;line-height:1.6">
-              Downloads the updated KB files directly from the repo â€” these are the versions with all approved corrections applied.
+              Downloads the updated KB files directly from the repo — these are the versions with all approved corrections applied.
             </p>
             <div class="button-row" style="margin-bottom:14px">
               <button class="button primary" id="downloadKBZip" type="button">Download Full KB (ZIP)</button>
@@ -507,7 +507,7 @@
               <span class="rule"></span>
             </div>
             <p style="font-size:13px;color:var(--text-secondary);margin-bottom:16px;line-height:1.6">
-              Generate a plain-language changelog of all corrections applied in the last 7 days. Written by the Apollo Patch Notes AI â€” readable by managers, coaches, and L&D.
+              Generate a plain-language changelog of all corrections applied in the last 7 days. Written by the Apollo Patch Notes AI — readable by managers, coaches, and L&D.
             </p>
             <button class="button secondary" id="patchNotesBtn" type="button">Download Patch Notes (Last 7 Days)</button>
           </section>
@@ -605,7 +605,7 @@
       </main>
     </div>
 
-    <!-- â”€â”€ CONFIRM MODAL â”€â”€ -->
+    <!-- ── CONFIRM MODAL ── -->
     <div class="confirm-layer hidden" id="confirmLayer" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
       <div class="confirm-bubble">
         <p class="kicker">Confirmation required</p>
@@ -617,12 +617,12 @@
         </label>
         <div class="button-row end">
           <button class="button quiet" id="cancelConfirm" type="button">Cancel</button>
-          <button class="button primary" id="confirmApprove" type="button" disabled>Approve &amp; Publish â†’</button>
+          <button class="button primary" id="confirmApprove" type="button" disabled>Approve &amp; Publish →</button>
         </div>
       </div>
     </div>
 
-    <!-- â”€â”€ TOAST â”€â”€ -->
+    <!-- ── TOAST ── -->
     <div class="toast hidden" id="toast"></div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -632,4 +632,3 @@
     <script src="./app.js"></script>
   </body>
 </html>
-
