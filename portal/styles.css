@@ -45,7 +45,7 @@ body {
 
 button, input, select, textarea { font: inherit; }
 
-/* â”€â”€ LAYOUT â”€â”€ */
+/* ── LAYOUT ── */
 
 .app-shell {
   min-height: 100vh;
@@ -53,7 +53,7 @@ button, input, select, textarea { font: inherit; }
   grid-template-columns: 248px minmax(0, 1fr);
 }
 
-/* â”€â”€ SIDEBAR â”€â”€ */
+/* ── SIDEBAR ── */
 
 .rail {
   background: var(--hb);
@@ -175,14 +175,14 @@ button, input, select, textarea { font: inherit; }
   line-height: 1.45;
 }
 
-/* â”€â”€ WORKSPACE â”€â”€ */
+/* ── WORKSPACE ── */
 
 .workspace {
   padding: 28px 28px 40px;
   min-width: 0;
 }
 
-/* â”€â”€ TOPBAR â”€â”€ */
+/* ── TOPBAR ── */
 
 .topbar {
   display: flex;
@@ -230,7 +230,7 @@ button, input, select, textarea { font: inherit; }
   color: var(--success);
 }
 
-/* â”€â”€ PANELS â”€â”€ */
+/* ── PANELS ── */
 
 .panel {
   background: var(--white);
@@ -254,7 +254,7 @@ button, input, select, textarea { font: inherit; }
   align-items: start;
 }
 
-/* â”€â”€ SECTION TITLES â”€â”€ */
+/* ── SECTION TITLES ── */
 
 .section-title {
   display: flex;
@@ -279,7 +279,7 @@ button, input, select, textarea { font: inherit; }
   background: var(--border);
 }
 
-/* â”€â”€ FORM ELEMENTS â”€â”€ */
+/* ── FORM ELEMENTS ── */
 
 .field {
   display: grid;
@@ -329,7 +329,7 @@ input:focus, select:focus, textarea:focus {
   gap: 14px;
 }
 
-/* â”€â”€ BUTTONS â”€â”€ */
+/* ── BUTTONS ── */
 
 .button-row, .toolbar-row {
   display: flex;
@@ -386,7 +386,7 @@ input:focus, select:focus, textarea:focus {
 
 .button:disabled { cursor: not-allowed; opacity: 0.4; }
 
-/* â”€â”€ STATUS CHIPS â”€â”€ */
+/* ── STATUS CHIPS ── */
 
 .status-chip {
   flex: 0 0 auto;
@@ -439,7 +439,7 @@ input:focus, select:focus, textarea:focus {
   color: var(--text-muted);
 }
 
-/* â”€â”€ STATUS LADDER â”€â”€ */
+/* ── STATUS LADDER ── */
 
 .status-ladder { display: grid; gap: 10px; }
 
@@ -464,7 +464,7 @@ input:focus, select:focus, textarea:focus {
   line-height: 1.45;
 }
 
-/* â”€â”€ QUEUE ITEMS â”€â”€ */
+/* ── QUEUE ITEMS ── */
 
 .batch-list, .queue-list, .recent-list { display: grid; gap: 10px; }
 
@@ -501,7 +501,7 @@ input:focus, select:focus, textarea:focus {
   line-height: 1.4;
 }
 
-/* â”€â”€ BATCH WORKBENCH â”€â”€ */
+/* ── BATCH WORKBENCH ── */
 
 .batch-workbench {
   margin-top: 20px;
@@ -527,7 +527,7 @@ input:focus, select:focus, textarea:focus {
   border-radius: 999px;
 }
 
-/* â”€â”€ DETAIL PANEL â”€â”€ */
+/* ── DETAIL PANEL ── */
 
 .kicker {
   font-size: 11px;
@@ -558,7 +558,7 @@ input:focus, select:focus, textarea:focus {
 
 .commit-link:hover { background: var(--trigger-light); }
 
-/* â”€â”€ MODE STRIP â”€â”€ */
+/* ── MODE STRIP ── */
 
 .decision-strip {
   display: grid;
@@ -587,7 +587,7 @@ input:focus, select:focus, textarea:focus {
   border-color: var(--hb);
 }
 
-/* â”€â”€ DIFF GRID â”€â”€ */
+/* ── DIFF GRID ── */
 
 .diff-grid {
   display: grid;
@@ -595,7 +595,7 @@ input:focus, select:focus, textarea:focus {
   gap: 14px;
 }
 
-/* â”€â”€ EMPTY STATE â”€â”€ */
+/* ── EMPTY STATE ── */
 
 .empty-state {
   display: grid;
@@ -608,7 +608,7 @@ input:focus, select:focus, textarea:focus {
 
 .empty-state strong { font-size: 15px; color: var(--text-secondary); }
 
-/* â”€â”€ ALERTS â”€â”€ */
+/* ── ALERTS ── */
 
 .alert-banner {
   display: flex;
@@ -634,7 +634,7 @@ input:focus, select:focus, textarea:focus {
   color: var(--danger);
 }
 
-/* â”€â”€ CONFIRM MODAL â”€â”€ */
+/* ── CONFIRM MODAL ── */
 
 .confirm-layer {
   position: fixed;
@@ -680,7 +680,7 @@ input:focus, select:focus, textarea:focus {
 
 .checkline input { width: auto; margin-top: 2px; accent-color: var(--trigger); }
 
-/* â”€â”€ TOAST â”€â”€ */
+/* ── TOAST ── */
 
 .toast {
   position: fixed;
@@ -697,14 +697,14 @@ input:focus, select:focus, textarea:focus {
   font-weight: 500;
 }
 
-/* â”€â”€ VIEWS â”€â”€ */
+/* ── VIEWS ── */
 
 .view { display: none; }
 .view.active { display: block; }
 
 .hidden { display: none !important; }
 
-/* â”€â”€ ACTIVITY â”€â”€ */
+/* ── ACTIVITY ── */
 
 .activity-band {
   background: var(--white);
@@ -722,7 +722,7 @@ input:focus, select:focus, textarea:focus {
 .recent-item strong { font-size: 13px; font-weight: 700; }
 .recent-item span { font-size: 12px; color: var(--text-secondary); }
 
-/* â”€â”€ SIDEBAR LOGO â”€â”€ */
+/* ── SIDEBAR LOGO ── */
 
 .sidebar-logo {
   max-width: 120px;
@@ -731,7 +731,7 @@ input:focus, select:focus, textarea:focus {
   display: block;
 }
 
-/* â”€â”€ GUIDE PANEL â”€â”€ */
+/* ── GUIDE PANEL ── */
 
 .guide-panel {
   overflow-y: auto;
@@ -845,7 +845,7 @@ input:focus, select:focus, textarea:focus {
   border-color: var(--success);
 }
 
-/* â”€â”€ EXPORT PROGRESS â”€â”€ */
+/* ── EXPORT PROGRESS ── */
 
 .export-progress-bar-track {
   width: 100%;
@@ -863,7 +863,7 @@ input:focus, select:focus, textarea:focus {
   transition: width 0.2s ease;
 }
 
-/* â”€â”€ MULTI-TARGET CARDS â”€â”€ */
+/* ── MULTI-TARGET CARDS ── */
 
 .multi-target-header {
   display: flex;
@@ -966,7 +966,7 @@ input:focus, select:focus, textarea:focus {
   box-shadow: 0 0 0 3px var(--trigger-light);
 }
 
-/* â”€â”€ NEW FILE MODE â”€â”€ */
+/* ── NEW FILE MODE ── */
 
 .ignored-badge {
   display: inline-block;
@@ -996,7 +996,7 @@ input:focus, select:focus, textarea:focus {
 
 .new-file-banner { display: flex; }
 
-/* â”€â”€ CHATBASE SYNC â”€â”€ */
+/* ── CHATBASE SYNC ── */
 
 .activity-sync-row {
   margin-top: 10px;
@@ -1027,7 +1027,7 @@ input:focus, select:focus, textarea:focus {
 
 .sync-checkbox-label:has(input:checked) { color: var(--success); }
 
-/* â”€â”€ RESPONSIVE â”€â”€ */
+/* ── RESPONSIVE ── */
 
 /* WEEKLY MAINTENANCE */
 
@@ -1215,4 +1215,3 @@ input:focus, select:focus, textarea:focus {
   .layout-grid, .review-layout, .diff-grid, .field-row, .maintenance-grid, .maintenance-hero, .maintenance-summary-grid { grid-template-columns: 1fr; }
   .workspace { padding: 16px; }
 }
-
