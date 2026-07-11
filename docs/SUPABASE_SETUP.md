@@ -26,6 +26,8 @@ This setup keeps the browser safe:
 
 For the open-link prototype, also run `supabase/public_access.sql`. This removes the sign-in requirement so anyone with the portal URL can submit and approve correction rows.
 
+If the portal is already live and you only need the Weekly Maintenance tab's shared confirmation history, run `supabase/migrations/add_weekly_maintenance_runs.sql` in the SQL Editor. Until that table exists, the tab still saves confirmations in the current browser.
+
 ## 3. Enable Login
 
 The simplest first version is email login.

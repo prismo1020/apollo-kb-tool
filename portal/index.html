@@ -34,6 +34,9 @@
           <button class="nav-item" type="button" data-view="activity">
             <span class="nav-dot"></span>Activity Log
           </button>
+          <button class="nav-item" type="button" data-view="maintenance">
+            <span class="nav-dot"></span>Weekly Maintenance
+          </button>
         </nav>
 
         <div class="status-block">
@@ -517,6 +520,86 @@
             <div id="activityList" class="recent-list"></div>
           </section>
 
+        </section>
+
+        <!-- WEEKLY MAINTENANCE VIEW -->
+        <section class="view" id="maintenanceView">
+          <div class="maintenance-grid">
+
+            <section class="panel maintenance-check-panel">
+              <div class="section-title">
+                <h2>Weekly Maintenance</h2>
+                <span class="rule"></span>
+              </div>
+
+              <div class="maintenance-hero">
+                <div>
+                  <p class="kicker">Owner</p>
+                  <h3>Kenneth</h3>
+                  <p>Kenneth should open this tab once each week, complete the manual maintenance routine, then log the confirmation here.</p>
+                </div>
+                <div class="maintenance-status-card" id="maintenanceStatusCard">
+                  <span class="status-chip submitted" id="maintenanceWeekStatus">Due this week</span>
+                  <strong id="maintenanceWeekLabel">Current week</strong>
+                  <span id="maintenanceLastDone">No confirmation logged yet.</span>
+                </div>
+              </div>
+
+              <div class="maintenance-summary-grid" id="maintenanceSummary">
+                <div class="maintenance-stat muted">Loading maintenance snapshot...</div>
+              </div>
+
+              <div class="maintenance-checklist" id="maintenanceChecklist"></div>
+
+              <div class="field-row">
+                <label class="field">
+                  <span>Completed by</span>
+                  <input id="maintenanceCompletedBy" type="text" value="Kenneth" />
+                </label>
+                <label class="field">
+                  <span>Week</span>
+                  <input id="maintenanceWeekInput" type="text" readonly />
+                </label>
+              </div>
+
+              <label class="field">
+                <span>Notes</span>
+                <textarea id="maintenanceNotes" rows="3" placeholder="Optional: what was checked, anything waiting, or anything that needs follow-up."></textarea>
+              </label>
+
+              <div class="button-row">
+                <button class="button primary" id="confirmMaintenance" type="button">Confirm Weekly Maintenance</button>
+                <button class="button quiet" id="refreshMaintenance" type="button">Refresh Snapshot</button>
+              </div>
+              <p class="maintenance-save-hint" id="maintenanceSaveHint">Check every routine above before confirming the week.</p>
+            </section>
+
+            <section class="panel guide-panel maintenance-guide">
+              <div class="section-title">
+                <h2>Maintenance Log</h2>
+                <span class="rule"></span>
+              </div>
+
+              <div class="guide-section">
+                <div class="guide-section-label">Weekly Routine</div>
+                <ul class="guide-tips">
+                  <li>Review active corrections and clear anything ready for review.</li>
+                  <li>Investigate failed or stuck automation items before they pile up.</li>
+                  <li>Confirm applied KB updates were backed up to Google Drive.</li>
+                  <li>Confirm applied KB updates were replaced and retrained in Chatbase.</li>
+                  <li>Generate patch notes when changes were applied during the week.</li>
+                </ul>
+              </div>
+
+              <div class="guide-section">
+                <div class="guide-section-label">Recent Confirmations</div>
+                <div class="maintenance-log" id="maintenanceLog">
+                  <div class="recent-item muted">No maintenance confirmations loaded yet.</div>
+                </div>
+              </div>
+            </section>
+
+          </div>
         </section>
 
       </main>

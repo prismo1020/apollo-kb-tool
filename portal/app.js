@@ -2,10 +2,40 @@ const config = window.APOLLO_CONFIG || {};
 const supabaseClient = window.supabase.createClient(config.supabaseUrl, config.supabaseAnonKey);
 
 const GITHUB_RAW_BASE = "https://raw.githubusercontent.com/prismo1020/apollo-kb-tool/main/";
+const MAINTENANCE_STORAGE_KEY = "apolloWeeklyMaintenance";
+const MAINTENANCE_TASKS = [
+  {
+    key: "review_queue",
+    label: "Review the correction queue",
+    detail: "Clear anything marked analysis ready or needs review, and note anything waiting on clarification.",
+  },
+  {
+    key: "check_failures",
+    label: "Check for failed or stuck automation",
+    detail: "Look for failed, processing, or approved items that need manual follow-up.",
+  },
+  {
+    key: "drive_backup",
+    label: "Confirm Google Drive backup",
+    detail: "Make sure applied KB files have been downloaded and uploaded to the Drive backup folder.",
+  },
+  {
+    key: "chatbase_sync",
+    label: "Confirm Chatbase retraining",
+    detail: "Replace updated files in Chatbase, retrain Apollo, and mark the Activity Log sync checkbox.",
+  },
+  {
+    key: "patch_notes",
+    label: "Generate weekly patch notes when needed",
+    detail: "Download patch notes for the last 7 days if any corrections were applied this week.",
+  },
+];
 
 const state = {
   drafts: [],
   corrections: [],
+  maintenanceRecords: [],
+  maintenanceLogSource: "browser",
   selectedId: null,
   mode: "existing",
   pendingMultiTargets: null,
@@ -75,6 +105,18 @@ const els = {
   fcFilename: document.getElementById("fcFilename"),
   fcRelatedChips: document.getElementById("fcRelatedChips"),
   fcRelatedWrap: document.getElementById("fcRelatedWrap"),
+  maintenanceChecklist: document.getElementById("maintenanceChecklist"),
+  maintenanceSummary: document.getElementById("maintenanceSummary"),
+  maintenanceLog: document.getElementById("maintenanceLog"),
+  maintenanceCompletedBy: document.getElementById("maintenanceCompletedBy"),
+  maintenanceWeekInput: document.getElementById("maintenanceWeekInput"),
+  maintenanceNotes: document.getElementById("maintenanceNotes"),
+  maintenanceWeekStatus: document.getElementById("maintenanceWeekStatus"),
+  maintenanceWeekLabel: document.getElementById("maintenanceWeekLabel"),
+  maintenanceLastDone: document.getElementById("maintenanceLastDone"),
+  maintenanceSaveHint: document.getElementById("maintenanceSaveHint"),
+  confirmMaintenance: document.getElementById("confirmMaintenance"),
+  refreshMaintenance: document.getElementById("refreshMaintenance"),
 };
 
 // ── UTILS ──────────────────────────────────────────────────────────────────
@@ -426,6 +468,306 @@ function renderActivity(items) {
 }
 
 // ── DETAIL PANEL ──────────────────────────────────────────────────────────
+
+// WEEKLY MAINTENANCE
+
+function localDateKey(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function currentMaintenanceWeek() {
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  const mondayOffset = (start.getDay() + 6) % 7;
+  start.setDate(start.getDate() - mondayOffset);
+  const end = new Date(start);
+  end.setDate(start.getDate() + 6);
+  end.setHours(23, 59, 59, 999);
+  return {
+    start,
+    end,
+    key: localDateKey(start),
+    endKey: localDateKey(end),
+  };
+}
+
+function displayDate(date) {
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+function displayMaintenanceWeek(week = currentMaintenanceWeek()) {
+  return `${displayDate(week.start)} - ${displayDate(week.end)}`;
+}
+
+function readMaintenanceStore() {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(MAINTENANCE_STORAGE_KEY) || "{}");
+    return {
+      weeks: parsed.weeks || {},
+      records: Array.isArray(parsed.records) ? parsed.records : [],
+    };
+  } catch {
+    return { weeks: {}, records: [] };
+  }
+}
+
+function writeMaintenanceStore(store) {
+  try {
+    window.localStorage.setItem(MAINTENANCE_STORAGE_KEY, JSON.stringify(store));
+  } catch {
+    // Local storage can be unavailable in private browser modes. The shared save path still runs.
+  }
+}
+
+function currentMaintenanceCheckedKeys() {
+  if (!els.maintenanceChecklist) return [];
+  return Array.from(els.maintenanceChecklist.querySelectorAll("input[type='checkbox']:checked"))
+    .map((input) => input.dataset.maintenanceKey);
+}
+
+function persistMaintenanceDraft() {
+  const week = currentMaintenanceWeek();
+  const store = readMaintenanceStore();
+  store.weeks[week.key] = {
+    checkedKeys: currentMaintenanceCheckedKeys(),
+    completedBy: els.maintenanceCompletedBy?.value || "Kenneth",
+    notes: els.maintenanceNotes?.value || "",
+  };
+  writeMaintenanceStore(store);
+  syncMaintenanceConfirmButton();
+}
+
+function syncMaintenanceConfirmButton() {
+  if (!els.confirmMaintenance || !els.maintenanceSaveHint) return;
+  const checked = currentMaintenanceCheckedKeys().length;
+  const remaining = MAINTENANCE_TASKS.length - checked;
+  const hasName = Boolean((els.maintenanceCompletedBy?.value || "").trim());
+  els.confirmMaintenance.disabled = remaining > 0 || !hasName;
+  if (!hasName) {
+    els.maintenanceSaveHint.textContent = "Enter who completed the maintenance before confirming.";
+  } else if (remaining > 0) {
+    els.maintenanceSaveHint.textContent = `Check ${remaining} more routine${remaining === 1 ? "" : "s"} before confirming the week.`;
+  } else {
+    els.maintenanceSaveHint.textContent = "All routines are checked. Ready to confirm this week.";
+  }
+}
+
+function renderMaintenanceChecklist() {
+  if (!els.maintenanceChecklist) return;
+  const week = currentMaintenanceWeek();
+  const store = readMaintenanceStore();
+  const draft = store.weeks[week.key] || {};
+  const checkedKeys = new Set(draft.checkedKeys || []);
+  if (els.maintenanceWeekInput) els.maintenanceWeekInput.value = displayMaintenanceWeek(week);
+  if (els.maintenanceCompletedBy && draft.completedBy) els.maintenanceCompletedBy.value = draft.completedBy;
+  if (els.maintenanceNotes && draft.notes) els.maintenanceNotes.value = draft.notes;
+
+  els.maintenanceChecklist.innerHTML = MAINTENANCE_TASKS
+    .map((task) => `
+      <label class="maintenance-check">
+        <input type="checkbox" data-maintenance-key="${escapeHtml(task.key)}" ${checkedKeys.has(task.key) ? "checked" : ""} />
+        <span>
+          <strong>${escapeHtml(task.label)}</strong>
+          <small>${escapeHtml(task.detail)}</small>
+        </span>
+      </label>
+    `)
+    .join("");
+
+  els.maintenanceChecklist.querySelectorAll("input[type='checkbox']").forEach((input) => {
+    input.addEventListener("change", persistMaintenanceDraft);
+  });
+  syncMaintenanceConfirmButton();
+}
+
+function renderMaintenanceWeekStatus(records = []) {
+  if (!els.maintenanceWeekStatus || !els.maintenanceWeekLabel || !els.maintenanceLastDone) return;
+  const week = currentMaintenanceWeek();
+  const currentRecord = records.find((record) => record.week_start === week.key);
+  els.maintenanceWeekLabel.textContent = displayMaintenanceWeek(week);
+  if (currentRecord) {
+    els.maintenanceWeekStatus.className = "status-chip applied";
+    els.maintenanceWeekStatus.textContent = "Complete this week";
+    const completedAt = currentRecord.completed_at ? new Date(currentRecord.completed_at) : null;
+    const by = currentRecord.completed_by || "Kenneth";
+    els.maintenanceLastDone.textContent = completedAt && !isNaN(completedAt)
+      ? `Confirmed by ${by} on ${completedAt.toLocaleString()}`
+      : `Confirmed by ${by}`;
+    return;
+  }
+
+  els.maintenanceWeekStatus.className = "status-chip submitted";
+  els.maintenanceWeekStatus.textContent = "Due this week";
+  const lastRecord = records[0];
+  if (lastRecord?.completed_at) {
+    const completedAt = new Date(lastRecord.completed_at);
+    els.maintenanceLastDone.textContent = `Last confirmed ${displayDate(completedAt)} by ${lastRecord.completed_by || "Kenneth"}.`;
+  } else {
+    els.maintenanceLastDone.textContent = "No confirmation logged yet.";
+  }
+}
+
+function renderMaintenanceSummary(items = []) {
+  if (!els.maintenanceSummary) return;
+  const since = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const activeStatuses = new Set(["submitted", "analysis_ready", "needs_review", "approved", "processing", "failed"]);
+  const ready = items.filter((item) => ["analysis_ready", "needs_review"].includes(item.status)).length;
+  const active = items.filter((item) => activeStatuses.has(item.status)).length;
+  const failed = items.filter((item) => item.status === "failed").length;
+  const appliedThisWeek = items.filter((item) => item.status === "applied" && item.applied_at && new Date(item.applied_at).getTime() >= since).length;
+  const driveOutstanding = items.filter((item) => item.status === "applied" && item.target_file && item.gdrive_synced !== true).length;
+  const chatbaseOutstanding = items.filter((item) => item.status === "applied" && item.target_file && item.chatbase_synced !== true).length;
+
+  const stats = [
+    { label: "Ready for review", value: ready, hint: "Needs Kenneth's attention", tone: ready ? "warning" : "good" },
+    { label: "Active corrections", value: active, hint: "Open or in progress", tone: active ? "warning" : "good" },
+    { label: "Failed items", value: failed, hint: "Investigate first", tone: failed ? "danger" : "good" },
+    { label: "Applied this week", value: appliedThisWeek, hint: "Use for patch notes", tone: appliedThisWeek ? "info" : "muted" },
+    { label: "Drive not marked synced", value: driveOutstanding, hint: "Activity Log checkbox", tone: driveOutstanding ? "warning" : "good" },
+    { label: "Chatbase not marked synced", value: chatbaseOutstanding, hint: "Replace and retrain", tone: chatbaseOutstanding ? "warning" : "good" },
+  ];
+
+  els.maintenanceSummary.innerHTML = stats
+    .map((stat) => `
+      <div class="maintenance-stat ${escapeHtml(stat.tone)}">
+        <span>${escapeHtml(stat.label)}</span>
+        <strong>${escapeHtml(stat.value)}</strong>
+        <small>${escapeHtml(stat.hint)}</small>
+      </div>
+    `)
+    .join("");
+}
+
+async function loadMaintenanceSummary() {
+  if (!els.maintenanceSummary) return;
+  try {
+    const { data, error } = await supabaseClient
+      .from("apollo_corrections")
+      .select("id,status,updated_at,applied_at,target_file,question,chatbase_synced,gdrive_synced")
+      .order("updated_at", { ascending: false })
+      .limit(200);
+    if (error) throw error;
+    renderMaintenanceSummary(data || []);
+  } catch (err) {
+    els.maintenanceSummary.innerHTML = `<div class="maintenance-stat danger"><span>Snapshot unavailable</span><strong>!</strong><small>${escapeHtml(err.message)}</small></div>`;
+  }
+}
+
+function saveMaintenanceRecordLocal(record) {
+  const store = readMaintenanceStore();
+  store.records = [
+    record,
+    ...(store.records || []).filter((item) => item.week_start !== record.week_start),
+  ].slice(0, 12);
+  store.weeks[record.week_start] = {
+    checkedKeys: record.checklist.map((task) => task.key),
+    completedBy: record.completed_by,
+    notes: record.notes,
+  };
+  writeMaintenanceStore(store);
+}
+
+function renderMaintenanceLog(records = [], source = "browser") {
+  if (!els.maintenanceLog) return;
+  if (!records.length) {
+    els.maintenanceLog.innerHTML = '<div class="recent-item muted">No maintenance confirmations yet.</div>';
+    renderMaintenanceWeekStatus([]);
+    return;
+  }
+  els.maintenanceLog.innerHTML = records
+    .map((record) => {
+      const completedAt = record.completed_at ? new Date(record.completed_at) : null;
+      const checklist = Array.isArray(record.checklist) ? record.checklist : [];
+      const weekLabel = record.week_start && record.week_end
+        ? `${escapeHtml(record.week_start)} to ${escapeHtml(record.week_end)}`
+        : escapeHtml(record.week_start || "Unknown week");
+      return `
+        <div class="recent-item maintenance-log-item">
+          <span class="recent-time">${completedAt && !isNaN(completedAt) ? escapeHtml(completedAt.toLocaleString()) : "Confirmation logged"}</span>
+          <strong>${weekLabel}</strong>
+          <span>Completed by ${escapeHtml(record.completed_by || "Kenneth")} - ${checklist.length} of ${MAINTENANCE_TASKS.length} routines checked</span>
+          ${record.notes ? `<span class="maintenance-log-note">${escapeHtml(record.notes)}</span>` : ""}
+        </div>
+      `;
+    })
+    .join("");
+  if (els.maintenanceSaveHint && source === "browser") {
+    els.maintenanceSaveHint.textContent += " Shared history is not connected yet, so confirmations are saved in this browser.";
+  }
+}
+
+async function loadMaintenanceLog() {
+  let records = readMaintenanceStore().records || [];
+  let source = "browser";
+  try {
+    const { data, error } = await supabaseClient
+      .from("apollo_maintenance_runs")
+      .select("*")
+      .order("completed_at", { ascending: false })
+      .limit(8);
+    if (error) throw error;
+    records = data || records;
+    source = "shared";
+  } catch {
+    source = "browser";
+  }
+  state.maintenanceRecords = records;
+  state.maintenanceLogSource = source;
+  renderMaintenanceLog(records, source);
+  renderMaintenanceWeekStatus(records);
+}
+
+async function loadMaintenance() {
+  renderMaintenanceChecklist();
+  renderMaintenanceWeekStatus(state.maintenanceRecords);
+  await Promise.all([loadMaintenanceSummary(), loadMaintenanceLog()]);
+}
+
+async function confirmWeeklyMaintenance() {
+  const checkedKeys = currentMaintenanceCheckedKeys();
+  if (checkedKeys.length !== MAINTENANCE_TASKS.length) {
+    syncMaintenanceConfirmButton();
+    showToast("Check every maintenance routine before confirming.");
+    return;
+  }
+  const week = currentMaintenanceWeek();
+  const completedBy = (els.maintenanceCompletedBy?.value || "").trim() || "Kenneth";
+  const record = {
+    week_start: week.key,
+    week_end: week.endKey,
+    completed_at: new Date().toISOString(),
+    completed_by: completedBy,
+    checklist: MAINTENANCE_TASKS.filter((task) => checkedKeys.includes(task.key)).map((task) => ({
+      key: task.key,
+      label: task.label,
+    })),
+    notes: (els.maintenanceNotes?.value || "").trim(),
+    source: "portal",
+  };
+
+  saveMaintenanceRecordLocal(record);
+  let savedShared = false;
+  try {
+    const { error } = await supabaseClient
+      .from("apollo_maintenance_runs")
+      .upsert(record, { onConflict: "week_start" });
+    if (error) throw error;
+    savedShared = true;
+  } catch {
+    savedShared = false;
+  }
+
+  showToast(
+    savedShared
+      ? "Weekly maintenance confirmed and saved to the shared log."
+      : "Weekly maintenance confirmed on this browser. Shared log table is not connected yet.",
+    savedShared ? "success" : "default"
+  );
+  await loadMaintenance();
+}
 
 function setMode(mode) {
   state.mode = mode;
@@ -1122,6 +1464,9 @@ document.querySelectorAll(".nav-item").forEach((button) => {
     if (button.dataset.view === "activity") {
       loadActivity().catch((err) => showToast(err.message));
     }
+    if (button.dataset.view === "maintenance") {
+      loadMaintenance().catch((err) => showToast(err.message));
+    }
   });
 });
 
@@ -1200,6 +1545,10 @@ els.downloadFile.addEventListener("click", () => downloadUpdatedFile().catch((er
 document.getElementById("downloadKBZip").addEventListener("click", () => downloadKBZip().catch((err) => showToast(err.message)));
 document.getElementById("downloadKBMerged").addEventListener("click", () => downloadKBMerged().catch((err) => showToast(err.message)));
 document.getElementById("patchNotesBtn").addEventListener("click", () => downloadPatchNotes().catch((err) => showToast(err.message)));
+els.confirmMaintenance.addEventListener("click", () => confirmWeeklyMaintenance().catch((err) => showToast(err.message)));
+els.refreshMaintenance.addEventListener("click", () => loadMaintenance().catch((err) => showToast(err.message)));
+els.maintenanceCompletedBy.addEventListener("input", persistMaintenanceDraft);
+els.maintenanceNotes.addEventListener("input", persistMaintenanceDraft);
 
 // ── LAST EDITED DATE ──────────────────────────────────────────────────────
 
@@ -1223,6 +1572,8 @@ async function loadLastEdited() {
 // ── INIT ──────────────────────────────────────────────────────────────────
 
 renderBatch();
+renderMaintenanceChecklist();
+renderMaintenanceWeekStatus(readMaintenanceStore().records || []);
 loadLastEdited();
 loadCorrections().catch((error) => {
   setSync("Needs attention");
