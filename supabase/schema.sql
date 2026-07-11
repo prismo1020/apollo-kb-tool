@@ -75,11 +75,26 @@ create table if not exists public.apollo_correction_events (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.apollo_maintenance_runs (
+  id uuid primary key default gen_random_uuid(),
+  week_start date not null unique,
+  week_end date not null,
+  completed_at timestamptz not null default now(),
+  completed_by text not null default 'Kenneth',
+  checklist jsonb not null default '[]'::jsonb,
+  notes text not null default '',
+  source text not null default 'portal',
+  created_at timestamptz not null default now()
+);
+
 create index if not exists apollo_corrections_status_idx
   on public.apollo_corrections(status, created_at);
 
 create index if not exists apollo_corrections_submitted_by_idx
   on public.apollo_corrections(submitted_by, created_at desc);
+
+create index if not exists apollo_maintenance_runs_completed_at_idx
+  on public.apollo_maintenance_runs(completed_at desc);
 
 create or replace function public.set_updated_at()
 returns trigger
@@ -194,6 +209,7 @@ $$;
 alter table public.apollo_profiles enable row level security;
 alter table public.apollo_corrections enable row level security;
 alter table public.apollo_correction_events enable row level security;
+alter table public.apollo_maintenance_runs enable row level security;
 
 drop policy if exists "Users can read their profile" on public.apollo_profiles;
 create policy "Users can read their profile"
@@ -263,13 +279,30 @@ for insert
 to authenticated
 with check (public.is_apollo_reviewer());
 
+drop policy if exists "Authenticated users can read maintenance runs" on public.apollo_maintenance_runs;
+create policy "Authenticated users can read maintenance runs"
+on public.apollo_maintenance_runs
+for select
+to authenticated
+using (true);
+
+drop policy if exists "Reviewers can manage maintenance runs" on public.apollo_maintenance_runs;
+create policy "Reviewers can manage maintenance runs"
+on public.apollo_maintenance_runs
+for all
+to authenticated
+using (public.is_apollo_reviewer())
+with check (public.is_apollo_reviewer());
+
 grant usage on schema public to anon, authenticated, service_role;
 grant select, insert, update on public.apollo_profiles to authenticated, service_role;
 grant select, insert, update on public.apollo_corrections to authenticated, service_role;
 grant select, insert on public.apollo_correction_events to authenticated, service_role;
+grant select, insert, update on public.apollo_maintenance_runs to authenticated, service_role;
 grant usage, select on sequence public.apollo_correction_events_id_seq to authenticated, service_role;
 
 -- After your first admin user signs up, run this with their email:
 -- update public.apollo_profiles
 -- set role = 'admin'
 -- where email = 'YOUR_EMAIL_HERE';
+
