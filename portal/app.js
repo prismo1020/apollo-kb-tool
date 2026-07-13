@@ -347,7 +347,7 @@ function renderQueue() {
 async function loadActivity() {
   const { data, error } = await supabaseClient
     .from("apollo_corrections")
-    .select("id,status,updated_at,applied_at,target_file,question,github_commit_url,failure_reason,chatbase_synced,chatbase_synced_at,gdrive_synced,gdrive_synced_at")
+    .select("id,status,updated_at,applied_at,target_file,question,github_commit_url,failure_reason,targets,chatbase_synced,chatbase_synced_at,gdrive_synced,gdrive_synced_at")
     .in("status", ["applied", "failed", "rejected", "processing"])
     .order("updated_at", { ascending: false })
     .limit(50);
@@ -408,7 +408,24 @@ function renderActivity(items) {
     els.activityList.innerHTML = '<div class="recent-item muted">No activity yet.</div>';
     return;
   }
-  els.activityList.innerHTML = items
+
+  // Expand multi-file corrections to show each applied target file
+  const expandedItems = [];
+  for (const item of items) {
+    const isMultiFile = Array.isArray(item.targets) && item.targets.length > 1;
+    if (isMultiFile && item.status === "applied") {
+      // Show each approved target as a separate row
+      const approvedTargets = item.targets.filter(t => t.status === "approved");
+      for (const target of approvedTargets) {
+        expandedItems.push({ ...item, target_file: target.file, _isExpandedMultiFile: true });
+      }
+    } else {
+      // Single file or not yet applied
+      expandedItems.push(item);
+    }
+  }
+
+  els.activityList.innerHTML = expandedItems
     .map((item) => {
       const isApplied = item.status === "applied";
       const cbSynced = item.chatbase_synced === true;
