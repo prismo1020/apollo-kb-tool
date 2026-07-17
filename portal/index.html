@@ -6,7 +6,7 @@
     <title>Apollo KB Portal — Sandbox VR</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link href="https://fonts.googleapis.com/css2?family=Gordita:wght@400;500;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="./styles.css?v=20260717c" />
+    <link rel="stylesheet" href="./styles.css?v=20260717d" />
   </head>
   <body>
     <div class="app-shell">
@@ -525,6 +525,23 @@
         <!-- WEEKLY MAINTENANCE VIEW -->
         <section class="view" id="maintenanceView">
 
+          <!-- ── TALK TO APOLLO ── -->
+          <section class="panel apollo-chat-panel">
+            <div class="section-title">
+              <h2>Talk to Apollo</h2>
+              <span class="rule"></span>
+            </div>
+            <p class="metrics-intro">Test Apollo live — ask it anything to sanity-check the knowledge base after this week's updates.</p>
+            <div id="apolloChatMount" class="apollo-chat-mount">
+              <iframe
+                id="apolloChatFrame"
+                title="Apollo chat"
+                src="https://www.chatbase.co/chatbot-iframe/w772dl7xhw86U5OkMvUDX"
+                loading="lazy"
+                referrerpolicy="no-referrer"></iframe>
+            </div>
+          </section>
+
           <!-- ── METRICS DASHBOARD ── -->
           <section class="panel metrics-dashboard">
             <div class="section-title">
@@ -688,6 +705,6 @@
     <script src="https://cdn.jsdelivr.net/npm/mammoth@1/mammoth.browser.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jszip@3/dist/jszip.min.js"></script>
     <script src="./config.js"></script>
-    <script src="./app.js?v=20260717c"></script>
+    <script src="./app.js?v=20260717d"></script>
   </body>
 </html>
