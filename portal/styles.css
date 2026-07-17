@@ -1351,3 +1351,82 @@ input:focus, select:focus, textarea:focus {
   border: 0;
   display: block;
 }
+
+/* ── ROUND-2 METRICS: alert, goals, history, patch status ── */
+.maintenance-alert {
+  padding: 12px 16px;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 16px;
+  border: 1px solid transparent;
+}
+.maintenance-alert.ok   { background: var(--success-light); color: #10744c; border-color: #bfe6d4; }
+.maintenance-alert.due  { background: var(--trigger-light); color: var(--trigger-dark); border-color: #bcd9ff; }
+.maintenance-alert.warn { background: var(--danger-light); color: #a3271f; border-color: #f3c9c6; }
+
+.metric-card.breach {
+  border-color: #f3c9c6;
+  background: var(--danger-light);
+}
+
+.patch-status { font-size: 12px; font-weight: 600; padding: 6px 0; }
+.patch-status.done { color: var(--success); }
+.patch-status.pending { color: var(--text-muted); }
+
+.goals-editor {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px 18px;
+}
+.goal-row {
+  display: grid;
+  grid-template-columns: 1fr auto 84px;
+  align-items: center;
+  gap: 8px;
+}
+.goal-metric { font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+.goal-kind, .goal-val {
+  font-size: 12px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--white);
+}
+
+.metrics-history-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.metrics-history-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+}
+.metrics-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  min-width: 720px;
+}
+.metrics-table th, .metrics-table td {
+  padding: 8px 10px;
+  text-align: left;
+  border-bottom: 1px solid var(--border-light);
+  white-space: nowrap;
+}
+.metrics-table th {
+  font-weight: 700;
+  color: var(--text-secondary);
+  background: var(--surface);
+  position: sticky;
+  top: 0;
+}
+.metrics-table td:last-child { white-space: normal; min-width: 160px; color: var(--text-secondary); }
+
+@media (max-width: 900px) {
+  .goals-editor { grid-template-columns: 1fr; }
+}

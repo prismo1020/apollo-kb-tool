@@ -39,7 +39,83 @@ const WEEKLY_METRICS = [
   { key: "thumbs_up", label: "Thumbs up", hint: "Positive feedback", color: "#30a46c" },
   { key: "thumbs_down", label: "Thumbs down", hint: "Negative feedback", color: "#e5484d" },
 ];
+
+// Derived metrics computed from the raw weekly numbers (turn counts into rates).
+const DERIVED_METRICS = [
+  {
+    key: "thumbs_up_rate",
+    label: "Thumbs-up rate",
+    suffix: "%",
+    color: "#30a46c",
+    compute: (row) => {
+      const up = numOrNull(row.thumbs_up);
+      const dn = numOrNull(row.thumbs_down);
+      if (up == null && dn == null) return null;
+      const total = (up || 0) + (dn || 0);
+      return total > 0 ? Math.round(((up || 0) / total) * 100) : null;
+    },
+  },
+  {
+    key: "tags_per_100",
+    label: "Reliability tags / 100 chats",
+    suffix: "",
+    color: "#7c5cff",
+    compute: (row) => {
+      const tags = numOrNull(row.reliability_tags);
+      const inter = numOrNull(row.apollo_interactions);
+      if (tags == null || inter == null || inter === 0) return null;
+      return Math.round((tags / inter) * 1000) / 10; // per 100 chats, 1 decimal
+    },
+  },
+];
 const METRIC_WEEKS = 8; // how many weeks of history to show in charts
+
+// Goal thresholds — editable in the UI, persisted per browser. `max` breaches
+// when the value goes above it; `min` breaches when it drops below.
+const GOALS_STORAGE_KEY = "apolloMetricGoals";
+const DEFAULT_GOALS = {
+  apollo_interactions: { min: null },
+  reliability_tags: { max: null },
+  thumbs_up: { min: null },
+  thumbs_down: { max: 15 },
+  thumbs_up_rate: { min: 85 },
+  tags_per_100: { max: null },
+};
+
+function numOrNull(v) {
+  if (v === null || v === undefined || v === "") return null;
+  const n = Number(v);
+  return Number.isNaN(n) ? null : n;
+}
+
+function loadGoals() {
+  try {
+    const stored = JSON.parse(window.localStorage.getItem(GOALS_STORAGE_KEY) || "{}");
+    return { ...DEFAULT_GOALS, ...stored };
+  } catch {
+    return { ...DEFAULT_GOALS };
+  }
+}
+
+function saveGoals(goals) {
+  try { window.localStorage.setItem(GOALS_STORAGE_KEY, JSON.stringify(goals)); } catch { /* ignore */ }
+}
+
+// Returns true if `value` breaches the goal for `key`.
+function goalBreached(key, value) {
+  if (value == null) return false;
+  const goal = loadGoals()[key] || {};
+  if (goal.max != null && value > goal.max) return true;
+  if (goal.min != null && value < goal.min) return true;
+  return false;
+}
+
+function goalText(key) {
+  const goal = loadGoals()[key] || {};
+  if (goal.max != null) return `Goal: ≤ ${goal.max}`;
+  if (goal.min != null) return `Goal: ≥ ${goal.min}`;
+  return "";
+}
 
 const state = {
   drafts: [],
@@ -131,8 +207,14 @@ const els = {
   metricTrend: document.getElementById("metricTrend"),
   metricComparison: document.getElementById("metricComparison"),
   activityChart: document.getElementById("activityChart"),
-  metricPatchNotes: document.getElementById("metricPatchNotes"),
+  metricNotes: document.getElementById("metricNotes"),
+  patchNotesStatus: document.getElementById("patchNotesStatus"),
   saveMetricsBtn: document.getElementById("saveMetricsBtn"),
+  goalsEditor: document.getElementById("goalsEditor"),
+  saveGoalsBtn: document.getElementById("saveGoalsBtn"),
+  metricsHistory: document.getElementById("metricsHistory"),
+  exportMetricsCsv: document.getElementById("exportMetricsCsv"),
+  maintenanceAlert: document.getElementById("maintenanceAlert"),
   confirmMaintenance: document.getElementById("confirmMaintenance"),
   refreshMaintenance: document.getElementById("refreshMaintenance"),
 };
@@ -902,6 +984,24 @@ function metricsForWeek(weekKey) {
   return state.weeklyMetrics.find((m) => m.week_start === weekKey) || null;
 }
 
+// Auto-mark that patch notes were generated for the current week.
+async function stampPatchNotesGenerated() {
+  const week = currentMaintenanceWeek();
+  const nowIso = new Date().toISOString();
+  const { error } = await supabaseClient
+    .from("apollo_weekly_metrics")
+    .upsert(
+      { week_start: week.key, week_end: week.endKey, patch_notes_posted: true, patch_notes_generated_at: nowIso },
+      { onConflict: "week_start" },
+    );
+  if (error) throw error;
+  await loadWeeklyMetrics();
+  if (document.getElementById("maintenanceView")?.classList.contains("active")) {
+    renderMetricsInputs();
+    renderMetricsHistory();
+  }
+}
+
 async function saveWeeklyMetrics() {
   const week = currentMaintenanceWeek();
   const row = {
@@ -909,8 +1009,10 @@ async function saveWeeklyMetrics() {
     week_end: week.endKey,
     updated_by: (els.maintenanceCompletedBy?.value || "").trim() || "Kenneth",
     updated_at: new Date().toISOString(),
-    patch_notes_posted: Boolean(els.metricPatchNotes?.checked),
+    notes: (els.metricNotes?.value || "").trim() || null,
   };
+  // Note: patch_notes_posted is intentionally omitted — it's auto-set when
+  // patch notes are downloaded, so we don't overwrite it here.
   for (const metric of WEEKLY_METRICS) {
     const input = document.getElementById(`metric_${metric.key}`);
     const raw = input ? input.value.trim() : "";
@@ -936,8 +1038,9 @@ async function saveWeeklyMetrics() {
 // ── WEEKLY METRICS: SVG chart helpers ─────────────────────────────────────
 
 // A compact bar-chart sparkline for a metric card (Chatbase-widget style).
-function sparkBars(values, color, { width = 260, height = 90 } = {}) {
-  const max = Math.max(1, ...values.map((v) => v || 0));
+// Pass `target` to draw a dashed goal line.
+function sparkBars(values, color, { width = 260, height = 90, target = null } = {}) {
+  const max = Math.max(1, target || 0, ...values.map((v) => v || 0));
   const n = values.length;
   const gap = 6;
   const barW = (width - gap * (n - 1)) / n;
@@ -949,7 +1052,12 @@ function sparkBars(values, color, { width = 260, height = 90 } = {}) {
       return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" rx="3" fill="${color}"><title>${v ?? 0}</title></rect>`;
     })
     .join("");
-  return `<svg viewBox="0 0 ${width} ${height}" width="100%" height="${height}" preserveAspectRatio="none" role="img">${bars}</svg>`;
+  let targetLine = "";
+  if (target != null && target > 0) {
+    const y = height - (target / max) * (height - 8);
+    targetLine = `<line x1="0" y1="${y.toFixed(1)}" x2="${width}" y2="${y.toFixed(1)}" stroke="#e5484d" stroke-width="1.5" stroke-dasharray="4 3" opacity="0.8"><title>Goal: ${target}</title></line>`;
+  }
+  return `<svg viewBox="0 0 ${width} ${height}" width="100%" height="${height}" preserveAspectRatio="none" role="img">${bars}${targetLine}</svg>`;
 }
 
 // Multi-series line chart with week labels along the x-axis.
@@ -992,11 +1100,14 @@ function lineChart(series, labels, { width = 640, height = 220 } = {}) {
 // ── WEEKLY METRICS: rendering ─────────────────────────────────────────────
 
 function renderMetricsDashboard() {
+  renderMaintenanceAlert();
   renderMetricsInputs();
   renderMetricCards();
   renderMetricTrendChart();
   renderMetricComparison();
   renderActivityChart();
+  renderGoalsEditor();
+  renderMetricsHistory();
 }
 
 // Pre-fill the entry form with this week's saved values (if any).
@@ -1009,7 +1120,18 @@ function renderMetricsInputs() {
       input.value = saved && saved[metric.key] != null ? saved[metric.key] : "";
     }
   }
-  if (els.metricPatchNotes) els.metricPatchNotes.checked = Boolean(saved && saved.patch_notes_posted);
+  if (els.metricNotes && document.activeElement !== els.metricNotes) {
+    els.metricNotes.value = (saved && saved.notes) || "";
+  }
+  // Patch-notes status is auto-detected (stamped when patch notes are downloaded).
+  if (els.patchNotesStatus) {
+    const posted = Boolean(saved && saved.patch_notes_posted);
+    const at = saved && saved.patch_notes_generated_at ? new Date(saved.patch_notes_generated_at) : null;
+    els.patchNotesStatus.className = `patch-status ${posted ? "done" : "pending"}`;
+    els.patchNotesStatus.textContent = posted
+      ? `✓ Patch notes generated this week${at && !isNaN(at) ? ` (${at.toLocaleDateString()})` : ""}`
+      : "○ No patch notes generated yet this week";
+  }
 }
 
 function orderedWeekKeys() {
@@ -1023,26 +1145,184 @@ function seriesForMetric(key) {
   });
 }
 
+// Value of a raw or derived metric for a given week (null if unavailable).
+function metricValueForWeek(def, weekKey) {
+  const row = metricsForWeek(weekKey);
+  if (!row) return null;
+  if (def.compute) return def.compute(row);
+  return row[def.key] != null ? Number(row[def.key]) : null;
+}
+
+function seriesForDef(def) {
+  return orderedWeekKeys().map((wk) => {
+    const v = metricValueForWeek(def, wk);
+    return v == null ? 0 : v;
+  });
+}
+
 function renderMetricCards() {
   if (!els.metricCards) return;
   const weekKeys = orderedWeekKeys();
-  const labels = weekKeys.map(shortWeekLabel);
   const currentKey = weekKeys[weekKeys.length - 1];
-  els.metricCards.innerHTML = WEEKLY_METRICS
-    .map((metric) => {
-      const values = seriesForMetric(metric.key);
-      const current = metricsForWeek(currentKey);
-      const value = current && current[metric.key] != null ? current[metric.key] : "—";
+  const allDefs = [...WEEKLY_METRICS, ...DERIVED_METRICS];
+  els.metricCards.innerHTML = allDefs
+    .map((def) => {
+      const values = seriesForDef(def);
+      const current = metricValueForWeek(def, currentKey);
+      const breached = goalBreached(def.key, current);
+      const goal = loadGoals()[def.key] || {};
+      const target = goal.max != null ? goal.max : (goal.min != null ? goal.min : null);
+      const gt = goalText(def.key);
+      const displayVal = current == null ? "—" : `${current}${def.suffix || ""}`;
       return `
-        <div class="metric-card">
-          <span class="metric-card-label">${escapeHtml(metric.label)}</span>
-          <span class="metric-card-value" style="color:${metric.color}">${escapeHtml(value)}</span>
-          ${sparkBars(values, metric.color)}
-          <span class="metric-card-foot">Last ${METRIC_WEEKS} weeks · ${escapeHtml(labels[0])}–${escapeHtml(labels[labels.length - 1])}</span>
+        <div class="metric-card ${breached ? "breach" : ""}">
+          <span class="metric-card-label">${escapeHtml(def.label)}</span>
+          <span class="metric-card-value" style="color:${breached ? "var(--danger)" : def.color}">${escapeHtml(displayVal)}</span>
+          ${sparkBars(values, def.color, { target })}
+          <span class="metric-card-foot">${gt ? `${escapeHtml(gt)}${breached ? " · ⚠ breached" : ""}` : `Last ${METRIC_WEEKS} weeks`}</span>
         </div>
       `;
     })
     .join("");
+}
+
+// Warn if a maintenance week was skipped (no confirmation logged for it).
+function renderMaintenanceAlert() {
+  if (!els.maintenanceAlert) return;
+  const records = state.maintenanceRecords || [];
+  const confirmedKeys = new Set(records.map((r) => r.week_start));
+  const weeks = lastNWeekStarts(METRIC_WEEKS).map((d) => localDateKey(d));
+  const currentKey = weeks[weeks.length - 1];
+  // Count consecutive most-recent PAST weeks (excluding current) with no confirmation.
+  let skipped = 0;
+  for (let i = weeks.length - 2; i >= 0; i--) {
+    if (confirmedKeys.has(weeks[i])) break;
+    skipped++;
+  }
+  const currentDone = confirmedKeys.has(currentKey);
+  if (skipped === 0 && currentDone) {
+    els.maintenanceAlert.className = "maintenance-alert ok";
+    els.maintenanceAlert.innerHTML = "✓ Maintenance is up to date.";
+  } else if (skipped === 0) {
+    els.maintenanceAlert.className = "maintenance-alert due";
+    els.maintenanceAlert.innerHTML = "This week's maintenance hasn't been confirmed yet.";
+  } else {
+    els.maintenanceAlert.className = "maintenance-alert warn";
+    els.maintenanceAlert.innerHTML = `⚠ ${skipped} week${skipped === 1 ? "" : "s"} of maintenance ${skipped === 1 ? "was" : "were"} skipped. Catch up as soon as possible.`;
+  }
+}
+
+// Editable goal thresholds (persisted per browser).
+function renderGoalsEditor() {
+  if (!els.goalsEditor) return;
+  const goals = loadGoals();
+  const allDefs = [...WEEKLY_METRICS, ...DERIVED_METRICS];
+  els.goalsEditor.innerHTML = allDefs
+    .map((def) => {
+      const g = goals[def.key] || {};
+      const kind = g.min != null ? "min" : "max"; // default editor kind
+      const val = g.min != null ? g.min : (g.max != null ? g.max : "");
+      return `
+        <div class="goal-row">
+          <span class="goal-metric">${escapeHtml(def.label)}${def.suffix ? ` (${def.suffix})` : ""}</span>
+          <select class="goal-kind" data-key="${escapeHtml(def.key)}">
+            <option value="max" ${kind === "max" ? "selected" : ""}>at most</option>
+            <option value="min" ${kind === "min" ? "selected" : ""}>at least</option>
+          </select>
+          <input class="goal-val" type="number" data-key="${escapeHtml(def.key)}" value="${val}" placeholder="none" />
+        </div>
+      `;
+    })
+    .join("");
+}
+
+function saveGoalsFromEditor() {
+  const goals = {};
+  document.querySelectorAll("#goalsEditor .goal-row").forEach((row) => {
+    const kindSel = row.querySelector(".goal-kind");
+    const valInput = row.querySelector(".goal-val");
+    const key = kindSel.dataset.key;
+    const raw = valInput.value.trim();
+    if (raw === "") { goals[key] = {}; return; }
+    const num = Number(raw);
+    goals[key] = kindSel.value === "min" ? { min: num } : { max: num };
+  });
+  saveGoals(goals);
+  renderMetricCards();
+  renderMetricsHistory();
+  showToast("Goals saved.", "success");
+}
+
+// History table of every stored week + CSV export.
+function metricsHistoryRows() {
+  // Union of weeks that have metrics or auto activity, newest first.
+  const keys = new Set([
+    ...state.weeklyMetrics.map((m) => m.week_start),
+    ...Object.keys(state.autoWeekActivity),
+  ]);
+  const sorted = [...keys].sort().reverse();
+  return sorted.map((wk) => {
+    const row = metricsForWeek(wk) || {};
+    const act = state.autoWeekActivity[wk] || {};
+    return {
+      week: wk,
+      apollo_interactions: row.apollo_interactions ?? "",
+      reliability_tags: row.reliability_tags ?? "",
+      thumbs_up: row.thumbs_up ?? "",
+      thumbs_down: row.thumbs_down ?? "",
+      thumbs_up_rate: DERIVED_METRICS[0].compute(row) ?? "",
+      tags_per_100: DERIVED_METRICS[1].compute(row) ?? "",
+      corrections_applied: act.applied ?? 0,
+      new_kb_files: act.newFiles ?? 0,
+      patch_notes: row.patch_notes_posted ? "yes" : "no",
+      notes: row.notes || "",
+    };
+  });
+}
+
+function renderMetricsHistory() {
+  if (!els.metricsHistory) return;
+  const rows = metricsHistoryRows();
+  if (!rows.length) {
+    els.metricsHistory.innerHTML = '<div class="recent-item muted">No weekly data yet.</div>';
+    return;
+  }
+  const head = `
+    <tr>
+      <th>Week</th><th>Interactions</th><th>Rel. tags</th><th>👍</th><th>👎</th>
+      <th>👍 %</th><th>Tags/100</th><th>Applied</th><th>New files</th><th>Patch</th><th>Notes</th>
+    </tr>`;
+  const body = rows
+    .map((r) => `
+      <tr>
+        <td>${escapeHtml(shortWeekLabel(r.week))}</td>
+        <td>${escapeHtml(String(r.apollo_interactions))}</td>
+        <td>${escapeHtml(String(r.reliability_tags))}</td>
+        <td>${escapeHtml(String(r.thumbs_up))}</td>
+        <td>${escapeHtml(String(r.thumbs_down))}</td>
+        <td>${escapeHtml(String(r.thumbs_up_rate))}</td>
+        <td>${escapeHtml(String(r.tags_per_100))}</td>
+        <td>${escapeHtml(String(r.corrections_applied))}</td>
+        <td>${escapeHtml(String(r.new_kb_files))}</td>
+        <td>${escapeHtml(r.patch_notes)}</td>
+        <td>${escapeHtml(r.notes)}</td>
+      </tr>`)
+    .join("");
+  els.metricsHistory.innerHTML = `<table class="metrics-table">${head}${body}</table>`;
+}
+
+function exportMetricsCsv() {
+  const rows = metricsHistoryRows();
+  if (!rows.length) { showToast("No metrics to export yet."); return; }
+  const cols = ["week", "apollo_interactions", "reliability_tags", "thumbs_up", "thumbs_down", "thumbs_up_rate", "tags_per_100", "corrections_applied", "new_kb_files", "patch_notes", "notes"];
+  const escapeCsv = (v) => {
+    const s = String(v ?? "");
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const lines = [cols.join(","), ...rows.map((r) => cols.map((c) => escapeCsv(r[c])).join(","))];
+  const date = new Date().toISOString().slice(0, 10);
+  triggerDownload(lines.join("\n"), `Apollo_Weekly_Metrics_${date}.csv`);
+  showToast("Metrics CSV downloaded.", "success");
 }
 
 function renderMetricTrendChart() {
@@ -1063,16 +1343,17 @@ function renderMetricComparison() {
   const thisWeek = metricsForWeek(thisKey);
   const lastWeek = metricsForWeek(lastKey);
 
-  els.metricComparison.innerHTML = WEEKLY_METRICS
-    .map((metric) => {
-      const cur = thisWeek && thisWeek[metric.key] != null ? Number(thisWeek[metric.key]) : null;
-      const prev = lastWeek && lastWeek[metric.key] != null ? Number(lastWeek[metric.key]) : null;
+  const allDefs = [...WEEKLY_METRICS, ...DERIVED_METRICS];
+  els.metricComparison.innerHTML = allDefs
+    .map((def) => {
+      const cur = thisWeek ? metricValueForWeek(def, thisKey) : null;
+      const prev = lastWeek ? metricValueForWeek(def, lastKey) : null;
       let deltaHtml = '<span class="cmp-delta muted">no prior week</span>';
       if (cur != null && prev != null) {
         const diff = cur - prev;
         const pct = prev === 0 ? (cur === 0 ? 0 : 100) : Math.round((diff / prev) * 100);
-        // For thumbs_down a decrease is good; for others an increase is good.
-        const goodWhenUp = metric.key !== "thumbs_down";
+        // For thumbs_down (and tags_per_100) a decrease is good; otherwise up is good.
+        const goodWhenUp = !["thumbs_down", "tags_per_100"].includes(def.key);
         const isGood = diff === 0 ? null : (diff > 0) === goodWhenUp;
         const tone = diff === 0 ? "muted" : (isGood ? "good" : "bad");
         const arrow = diff > 0 ? "▲" : (diff < 0 ? "▼" : "—");
@@ -1080,8 +1361,8 @@ function renderMetricComparison() {
       }
       return `
         <div class="cmp-tile">
-          <span class="cmp-label">${escapeHtml(metric.label)}</span>
-          <span class="cmp-value" style="color:${metric.color}">${cur != null ? cur : "—"}</span>
+          <span class="cmp-label">${escapeHtml(def.label)}</span>
+          <span class="cmp-value" style="color:${def.color}">${cur != null ? `${cur}${def.suffix || ""}` : "—"}</span>
           ${deltaHtml}
         </div>
       `;
@@ -1406,6 +1687,7 @@ async function downloadPatchNotes() {
     const date = new Date().toISOString().slice(0, 10);
     triggerDownload(fnData.patch_notes || "", `Apollo_Patch_Notes_${date}.txt`);
     showToast("Patch notes downloaded!", "success");
+    stampPatchNotesGenerated().catch(() => { /* non-fatal */ });
   } catch (err) {
     showToast(`Patch notes error: ${err.message}`);
   } finally {
@@ -1929,6 +2211,8 @@ els.refreshMaintenance.addEventListener("click", () => loadMaintenance().catch((
 els.maintenanceCompletedBy.addEventListener("input", persistMaintenanceDraft);
 els.maintenanceNotes.addEventListener("input", persistMaintenanceDraft);
 if (els.saveMetricsBtn) els.saveMetricsBtn.addEventListener("click", () => saveWeeklyMetrics().catch((err) => showToast(err.message)));
+if (els.saveGoalsBtn) els.saveGoalsBtn.addEventListener("click", () => saveGoalsFromEditor());
+if (els.exportMetricsCsv) els.exportMetricsCsv.addEventListener("click", () => exportMetricsCsv());
 
 // ── LAST EDITED DATE ──────────────────────────────────────────────────────
 

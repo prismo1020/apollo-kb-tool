@@ -6,7 +6,7 @@
     <title>Apollo KB Portal — Sandbox VR</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link href="https://fonts.googleapis.com/css2?family=Gordita:wght@400;500;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="./styles.css?v=20260717d" />
+    <link rel="stylesheet" href="./styles.css?v=20260717e" />
   </head>
   <body>
     <div class="app-shell">
@@ -525,6 +525,8 @@
         <!-- WEEKLY MAINTENANCE VIEW -->
         <section class="view" id="maintenanceView">
 
+          <div class="maintenance-alert due" id="maintenanceAlert">Checking maintenance status…</div>
+
           <!-- ── TALK TO APOLLO ── -->
           <section class="panel apollo-chat-panel">
             <div class="section-title">
@@ -588,13 +590,32 @@
                   <input id="metric_thumbs_down" type="number" min="0" inputmode="numeric" placeholder="0" />
                 </label>
               </div>
-              <label class="sync-checkbox-label" style="margin-top:10px">
-                <input id="metricPatchNotes" type="checkbox" />
-                <span>Patch notes generated &amp; posted this week</span>
+              <label class="field" style="margin-top:12px">
+                <span>Notes for this week <small style="font-weight:400;color:var(--text-muted)">(e.g. why did thumbs-down spike?)</small></span>
+                <textarea id="metricNotes" rows="2" placeholder="Optional context for these numbers."></textarea>
               </label>
+              <div class="patch-status pending" id="patchNotesStatus" style="margin-top:10px">Patch-notes status will appear here.</div>
+              <p class="field-hint">Patch-notes status updates automatically when you download patch notes above.</p>
               <div class="button-row" style="margin-top:12px">
                 <button class="button primary" id="saveMetricsBtn" type="button">Save this week's metrics</button>
               </div>
+            </div>
+
+            <div class="metrics-block" style="margin-top:20px">
+              <div class="guide-section-label">Goals &amp; thresholds</div>
+              <p class="field-hint">Set a target for any metric — cards turn red and show a goal line when a week breaches it. Saved to this browser.</p>
+              <div class="goals-editor" id="goalsEditor"></div>
+              <div class="button-row" style="margin-top:12px">
+                <button class="button secondary compact" id="saveGoalsBtn" type="button">Save goals</button>
+              </div>
+            </div>
+
+            <div class="metrics-block" style="margin-top:20px">
+              <div class="metrics-history-head">
+                <div class="guide-section-label" style="margin:0">Metrics history</div>
+                <button class="button quiet compact" id="exportMetricsCsv" type="button">Download CSV</button>
+              </div>
+              <div class="metrics-history-wrap" id="metricsHistory"></div>
             </div>
           </section>
 
@@ -705,6 +726,6 @@
     <script src="https://cdn.jsdelivr.net/npm/mammoth@1/mammoth.browser.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jszip@3/dist/jszip.min.js"></script>
     <script src="./config.js"></script>
-    <script src="./app.js?v=20260717d"></script>
+    <script src="./app.js?v=20260717e"></script>
   </body>
 </html>
