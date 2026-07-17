@@ -345,62 +345,85 @@ function renderQueue() {
 // ── ACTIVITY ──────────────────────────────────────────────────────────────
 
 async function loadActivity() {
-  const { data, error } = await supabaseClient
+  const baseCols = "id,status,updated_at,applied_at,target_file,question,github_commit_url,failure_reason,targets,chatbase_synced,chatbase_synced_at,gdrive_synced,gdrive_synced_at";
+  const statuses = ["applied", "failed", "rejected", "processing"];
+
+  // Prefer per-file sync state, but fall back gracefully if the file_sync
+  // column hasn't been added to the database yet.
+  let { data, error } = await supabaseClient
     .from("apollo_corrections")
-    .select("id,status,updated_at,applied_at,target_file,question,github_commit_url,failure_reason,targets,chatbase_synced,chatbase_synced_at,gdrive_synced,gdrive_synced_at")
-    .in("status", ["applied", "failed", "rejected", "processing"])
+    .select(`${baseCols},file_sync`)
+    .in("status", statuses)
     .order("updated_at", { ascending: false })
     .limit(50);
+
+  if (error && /file_sync/.test(error.message || "")) {
+    ({ data, error } = await supabaseClient
+      .from("apollo_corrections")
+      .select(baseCols)
+      .in("status", statuses)
+      .order("updated_at", { ascending: false })
+      .limit(50));
+  }
   if (error) throw error;
   renderActivity(data || []);
 }
 
-async function toggleChatbaseSync(id, checked) {
-  const row = document.querySelector(`.activity-sync-row[data-id="${id}"]`);
+// Sync state is tracked per file in the `file_sync` jsonb column, keyed by
+// filename: { "<file>": { chatbase_synced, chatbase_synced_at, gdrive_synced,
+// gdrive_synced_at } }. This lets each file of a multi-file correction be
+// marked synced independently.
+async function setFileSync(id, file, kind, checked) {
+  const rowKey = `${id}::${file}`;
+  const row = document.querySelector(`.activity-sync-row[data-key="${cssEscape(rowKey)}"]`);
   if (row) row.classList.add("saving");
   try {
-    const update = checked
-      ? { chatbase_synced: true, chatbase_synced_at: new Date().toISOString() }
-      : { chatbase_synced: false, chatbase_synced_at: null };
-    const { error } = await supabaseClient.from("apollo_corrections").update(update).eq("id", id);
+    // Read-modify-write the file_sync object so we don't clobber other files.
+    const { data, error: readErr } = await supabaseClient
+      .from("apollo_corrections")
+      .select("file_sync")
+      .eq("id", id)
+      .single();
+    if (readErr) throw readErr;
+    const fileSync = (data && data.file_sync) || {};
+    const entry = { ...(fileSync[file] || {}) };
+    const nowIso = new Date().toISOString();
+    if (kind === "chatbase") {
+      entry.chatbase_synced = checked;
+      entry.chatbase_synced_at = checked ? nowIso : null;
+    } else {
+      entry.gdrive_synced = checked;
+      entry.gdrive_synced_at = checked ? nowIso : null;
+    }
+    fileSync[file] = entry;
+
+    const { error } = await supabaseClient
+      .from("apollo_corrections")
+      .update({ file_sync: fileSync })
+      .eq("id", id);
     if (error) throw error;
-    const chip = document.querySelector(`.chatbase-sync-chip[data-id="${id}"]`);
+
+    const chipClass = kind === "chatbase" ? "chatbase-sync-chip" : "gdrive-sync-chip";
+    const label = kind === "chatbase" ? "Chatbase" : "Drive";
+    const chip = document.querySelector(`.${chipClass}[data-key="${cssEscape(rowKey)}"]`);
     if (chip) {
-      chip.className = `status-chip ${checked ? "applied" : ""} chatbase-sync-chip`;
-      chip.dataset.id = id;
-      chip.textContent = checked ? "✓ Synced to Chatbase" : "Not synced to Chatbase";
+      chip.className = `status-chip ${checked ? "applied" : ""} ${chipClass}`;
+      chip.textContent = checked ? `✓ Synced to ${label}` : `Not synced to ${label}`;
     }
   } catch (err) {
     showToast(`Sync save failed: ${err.message}`);
-    const cb = document.querySelector(`.chatbase-sync-cb[data-id="${id}"]`);
+    const cbClass = kind === "chatbase" ? "chatbase-sync-cb" : "gdrive-sync-cb";
+    const cb = document.querySelector(`.${cbClass}[data-key="${cssEscape(rowKey)}"]`);
     if (cb) cb.checked = !checked;
   } finally {
     if (row) row.classList.remove("saving");
   }
 }
 
-async function toggleGdriveSync(id, checked) {
-  const row = document.querySelector(`.activity-sync-row[data-id="${id}"]`);
-  if (row) row.classList.add("saving");
-  try {
-    const update = checked
-      ? { gdrive_synced: true, gdrive_synced_at: new Date().toISOString() }
-      : { gdrive_synced: false, gdrive_synced_at: null };
-    const { error } = await supabaseClient.from("apollo_corrections").update(update).eq("id", id);
-    if (error) throw error;
-    const chip = document.querySelector(`.gdrive-sync-chip[data-id="${id}"]`);
-    if (chip) {
-      chip.className = `status-chip ${checked ? "applied" : ""} gdrive-sync-chip`;
-      chip.dataset.id = id;
-      chip.textContent = checked ? "✓ Synced to Drive" : "Not synced to Drive";
-    }
-  } catch (err) {
-    showToast(`Sync save failed: ${err.message}`);
-    const cb = document.querySelector(`.gdrive-sync-cb[data-id="${id}"]`);
-    if (cb) cb.checked = !checked;
-  } finally {
-    if (row) row.classList.remove("saving");
-  }
+// Escape a string for safe use inside a CSS attribute selector.
+function cssEscape(value) {
+  if (window.CSS && typeof window.CSS.escape === "function") return window.CSS.escape(value);
+  return String(value).replace(/["\\]/g, "\\$&");
 }
 
 function renderActivity(items) {
@@ -428,14 +451,20 @@ function renderActivity(items) {
   els.activityList.innerHTML = expandedItems
     .map((item) => {
       const isApplied = item.status === "applied";
-      const cbSynced = item.chatbase_synced === true;
-      const cbSyncedAt = item.chatbase_synced_at
-        ? new Date(item.chatbase_synced_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+      // Per-file sync state, falling back to the legacy correction-level flags
+      // for rows saved before file_sync existed.
+      const fileSync = (item.file_sync && item.file_sync[item.target_file]) || null;
+      const cbSynced = fileSync ? fileSync.chatbase_synced === true : item.chatbase_synced === true;
+      const cbSyncedAtRaw = fileSync ? fileSync.chatbase_synced_at : item.chatbase_synced_at;
+      const cbSyncedAt = cbSyncedAtRaw
+        ? new Date(cbSyncedAtRaw).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
         : null;
-      const gdSynced = item.gdrive_synced === true;
-      const gdSyncedAt = item.gdrive_synced_at
-        ? new Date(item.gdrive_synced_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+      const gdSynced = fileSync ? fileSync.gdrive_synced === true : item.gdrive_synced === true;
+      const gdSyncedAtRaw = fileSync ? fileSync.gdrive_synced_at : item.gdrive_synced_at;
+      const gdSyncedAt = gdSyncedAtRaw
+        ? new Date(gdSyncedAtRaw).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
         : null;
+      const rowKey = `${item.id}::${item.target_file || ""}`;
 
       return `
         <div class="recent-item">
@@ -443,22 +472,22 @@ function renderActivity(items) {
           <strong>${escapeHtml(item.target_file || shortText(item.question, "No target file"))}</strong>
           <div style="display:flex;align-items:center;gap:8px;margin-top:6px;flex-wrap:wrap">
             <span class="status-chip ${escapeHtml(item.status)}">${escapeHtml(statusLabel(item.status))}</span>
-            <span class="status-chip ${gdSynced ? "applied" : ""} gdrive-sync-chip" data-id="${escapeHtml(item.id)}">${gdSynced ? `✓ Synced to Drive${gdSyncedAt ? ` · ${gdSyncedAt}` : ""}` : "Not synced to Drive"}</span>
-            <span class="status-chip ${cbSynced ? "applied" : ""} chatbase-sync-chip" data-id="${escapeHtml(item.id)}">${cbSynced ? `✓ Synced to Chatbase${cbSyncedAt ? ` · ${cbSyncedAt}` : ""}` : "Not synced to Chatbase"}</span>
+            <span class="status-chip ${gdSynced ? "applied" : ""} gdrive-sync-chip" data-key="${escapeHtml(rowKey)}">${gdSynced ? `✓ Synced to Drive${gdSyncedAt ? ` · ${gdSyncedAt}` : ""}` : "Not synced to Drive"}</span>
+            <span class="status-chip ${cbSynced ? "applied" : ""} chatbase-sync-chip" data-key="${escapeHtml(rowKey)}">${cbSynced ? `✓ Synced to Chatbase${cbSyncedAt ? ` · ${cbSyncedAt}` : ""}` : "Not synced to Chatbase"}</span>
             ${item.github_commit_url ? `<a href="${escapeHtml(item.github_commit_url)}" target="_blank" rel="noreferrer" class="commit-link" style="font-size:12px">View Commit →</a>` : ""}
           </div>
           ${isApplied && item.target_file ? `
-            <div class="activity-sync-row" data-id="${escapeHtml(item.id)}">
+            <div class="activity-sync-row" data-key="${escapeHtml(rowKey)}">
               <div class="button-row" style="margin-bottom:10px">
                 <button class="button secondary compact activity-dl-btn" data-file="${escapeHtml(item.target_file)}" type="button">Download .txt</button>
                 <button class="button quiet compact activity-copy-btn" data-file="${escapeHtml(item.target_file)}" type="button">Copy for Chatbase</button>
               </div>
               <label class="sync-checkbox-label">
-                <input type="checkbox" class="gdrive-sync-cb" data-id="${escapeHtml(item.id)}" ${gdSynced ? "checked" : ""} />
+                <input type="checkbox" class="gdrive-sync-cb" data-key="${escapeHtml(rowKey)}" data-id="${escapeHtml(item.id)}" data-file="${escapeHtml(item.target_file)}" ${gdSynced ? "checked" : ""} />
                 <span>Synced to Google Drive backup</span>
               </label>
               <label class="sync-checkbox-label" style="margin-top:6px">
-                <input type="checkbox" class="chatbase-sync-cb" data-id="${escapeHtml(item.id)}" ${cbSynced ? "checked" : ""} />
+                <input type="checkbox" class="chatbase-sync-cb" data-key="${escapeHtml(rowKey)}" data-id="${escapeHtml(item.id)}" data-file="${escapeHtml(item.target_file)}" ${cbSynced ? "checked" : ""} />
                 <span>Synced to Chatbase</span>
               </label>
             </div>
@@ -471,10 +500,10 @@ function renderActivity(items) {
     .join("");
 
   els.activityList.querySelectorAll(".gdrive-sync-cb").forEach((cb) => {
-    cb.addEventListener("change", () => toggleGdriveSync(cb.dataset.id, cb.checked));
+    cb.addEventListener("change", () => setFileSync(cb.dataset.id, cb.dataset.file, "gdrive", cb.checked));
   });
   els.activityList.querySelectorAll(".chatbase-sync-cb").forEach((cb) => {
-    cb.addEventListener("change", () => toggleChatbaseSync(cb.dataset.id, cb.checked));
+    cb.addEventListener("change", () => setFileSync(cb.dataset.id, cb.dataset.file, "chatbase", cb.checked));
   });
   els.activityList.querySelectorAll(".activity-dl-btn").forEach((btn) => {
     btn.addEventListener("click", () => downloadFileByPath(btn.dataset.file, btn));
