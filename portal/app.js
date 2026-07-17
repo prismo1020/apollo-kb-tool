@@ -31,11 +31,23 @@ const MAINTENANCE_TASKS = [
   },
 ];
 
+// Manually-entered weekly metrics (from Chatbase analytics). Auto metrics
+// (corrections applied, new KB files) are computed from the portal database.
+const WEEKLY_METRICS = [
+  { key: "apollo_interactions", label: "Apollo interactions", hint: "Total conversations this week", color: "#4c7df0" },
+  { key: "reliability_tags", label: "Reliability tags", hint: "Reliability tags logged", color: "#7c5cff" },
+  { key: "thumbs_up", label: "Thumbs up", hint: "Positive feedback", color: "#30a46c" },
+  { key: "thumbs_down", label: "Thumbs down", hint: "Negative feedback", color: "#e5484d" },
+];
+const METRIC_WEEKS = 8; // how many weeks of history to show in charts
+
 const state = {
   drafts: [],
   corrections: [],
   maintenanceRecords: [],
   maintenanceLogSource: "browser",
+  weeklyMetrics: [],       // rows from apollo_weekly_metrics, newest first
+  autoWeekActivity: {},    // { weekKey: { applied, newFiles } } from corrections
   selectedId: null,
   mode: "existing",
   pendingMultiTargets: null,
@@ -115,6 +127,12 @@ const els = {
   maintenanceWeekLabel: document.getElementById("maintenanceWeekLabel"),
   maintenanceLastDone: document.getElementById("maintenanceLastDone"),
   maintenanceSaveHint: document.getElementById("maintenanceSaveHint"),
+  metricCards: document.getElementById("metricCards"),
+  metricTrend: document.getElementById("metricTrend"),
+  metricComparison: document.getElementById("metricComparison"),
+  activityChart: document.getElementById("activityChart"),
+  metricPatchNotes: document.getElementById("metricPatchNotes"),
+  saveMetricsBtn: document.getElementById("saveMetricsBtn"),
   confirmMaintenance: document.getElementById("confirmMaintenance"),
   refreshMaintenance: document.getElementById("refreshMaintenance"),
 };
@@ -799,7 +817,292 @@ async function loadMaintenanceLog() {
 async function loadMaintenance() {
   renderMaintenanceChecklist();
   renderMaintenanceWeekStatus(state.maintenanceRecords);
-  await Promise.all([loadMaintenanceSummary(), loadMaintenanceLog()]);
+  await Promise.all([
+    loadMaintenanceSummary(),
+    loadMaintenanceLog(),
+    loadWeeklyMetrics(),
+    loadAutoWeekActivity(),
+  ]);
+  renderMetricsDashboard();
+}
+
+// ── WEEKLY METRICS: week helpers ──────────────────────────────────────────
+
+function weekStartFor(date) {
+  const start = new Date(date);
+  start.setHours(0, 0, 0, 0);
+  const mondayOffset = (start.getDay() + 6) % 7;
+  start.setDate(start.getDate() - mondayOffset);
+  return start;
+}
+
+// Returns the last N Monday week-start dates, oldest first.
+function lastNWeekStarts(n) {
+  const thisMonday = weekStartFor(new Date());
+  const weeks = [];
+  for (let i = n - 1; i >= 0; i--) {
+    const d = new Date(thisMonday);
+    d.setDate(thisMonday.getDate() - i * 7);
+    weeks.push(d);
+  }
+  return weeks;
+}
+
+function shortWeekLabel(dateOrKey) {
+  const d = dateOrKey instanceof Date ? dateOrKey : new Date(`${dateOrKey}T00:00:00`);
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+// ── WEEKLY METRICS: data ──────────────────────────────────────────────────
+
+async function loadWeeklyMetrics() {
+  try {
+    const { data, error } = await supabaseClient
+      .from("apollo_weekly_metrics")
+      .select("*")
+      .order("week_start", { ascending: false })
+      .limit(26);
+    if (error) throw error;
+    state.weeklyMetrics = data || [];
+  } catch {
+    // Table may not exist yet — dashboard still renders with empty history.
+    state.weeklyMetrics = [];
+  }
+}
+
+// Build a { weekKey: { applied, newFiles } } map from applied corrections.
+async function loadAutoWeekActivity() {
+  const activity = {};
+  try {
+    const earliest = lastNWeekStarts(METRIC_WEEKS)[0];
+    const { data, error } = await supabaseClient
+      .from("apollo_corrections")
+      .select("id,status,applied_at,request_type,targets")
+      .eq("status", "applied")
+      .gte("applied_at", earliest.toISOString())
+      .limit(500);
+    if (error) throw error;
+    for (const row of data || []) {
+      if (!row.applied_at) continue;
+      const key = localDateKey(weekStartFor(new Date(row.applied_at)));
+      const bucket = activity[key] || { applied: 0, newFiles: 0, filesTouched: 0 };
+      bucket.applied += 1;
+      if (row.request_type === "file_creation") bucket.newFiles += 1;
+      const approved = Array.isArray(row.targets) ? row.targets.filter((t) => t.status === "approved").length : 0;
+      bucket.filesTouched += approved > 0 ? approved : 1;
+      activity[key] = bucket;
+    }
+  } catch {
+    // Non-fatal: activity chart just shows zeros.
+  }
+  state.autoWeekActivity = activity;
+}
+
+function metricsForWeek(weekKey) {
+  return state.weeklyMetrics.find((m) => m.week_start === weekKey) || null;
+}
+
+async function saveWeeklyMetrics() {
+  const week = currentMaintenanceWeek();
+  const row = {
+    week_start: week.key,
+    week_end: week.endKey,
+    updated_by: (els.maintenanceCompletedBy?.value || "").trim() || "Kenneth",
+    updated_at: new Date().toISOString(),
+    patch_notes_posted: Boolean(els.metricPatchNotes?.checked),
+  };
+  for (const metric of WEEKLY_METRICS) {
+    const input = document.getElementById(`metric_${metric.key}`);
+    const raw = input ? input.value.trim() : "";
+    row[metric.key] = raw === "" ? null : Number(raw);
+  }
+
+  if (els.saveMetricsBtn) { els.saveMetricsBtn.disabled = true; els.saveMetricsBtn.textContent = "Saving…"; }
+  try {
+    const { error } = await supabaseClient
+      .from("apollo_weekly_metrics")
+      .upsert(row, { onConflict: "week_start" });
+    if (error) throw error;
+    showToast("Weekly metrics saved.", "success");
+    await loadWeeklyMetrics();
+    renderMetricsDashboard();
+  } catch (err) {
+    showToast(`Could not save metrics: ${err.message}`);
+  } finally {
+    if (els.saveMetricsBtn) { els.saveMetricsBtn.disabled = false; els.saveMetricsBtn.textContent = "Save this week's metrics"; }
+  }
+}
+
+// ── WEEKLY METRICS: SVG chart helpers ─────────────────────────────────────
+
+// A compact bar-chart sparkline for a metric card (Chatbase-widget style).
+function sparkBars(values, color, { width = 260, height = 90 } = {}) {
+  const max = Math.max(1, ...values.map((v) => v || 0));
+  const n = values.length;
+  const gap = 6;
+  const barW = (width - gap * (n - 1)) / n;
+  const bars = values
+    .map((v, i) => {
+      const h = Math.max(2, ((v || 0) / max) * (height - 8));
+      const x = i * (barW + gap);
+      const y = height - h;
+      return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" rx="3" fill="${color}"><title>${v ?? 0}</title></rect>`;
+    })
+    .join("");
+  return `<svg viewBox="0 0 ${width} ${height}" width="100%" height="${height}" preserveAspectRatio="none" role="img">${bars}</svg>`;
+}
+
+// Multi-series line chart with week labels along the x-axis.
+function lineChart(series, labels, { width = 640, height = 220 } = {}) {
+  const padL = 34, padR = 12, padT = 12, padB = 26;
+  const plotW = width - padL - padR;
+  const plotH = height - padT - padB;
+  const allVals = series.flatMap((s) => s.values.filter((v) => v != null));
+  const max = Math.max(1, ...allVals);
+  const n = labels.length;
+  const xFor = (i) => padL + (n <= 1 ? plotW / 2 : (i / (n - 1)) * plotW);
+  const yFor = (v) => padT + plotH - ((v || 0) / max) * plotH;
+
+  // horizontal gridlines + y labels (0, mid, max)
+  const ticks = [0, Math.round(max / 2), max];
+  const grid = ticks
+    .map((t) => {
+      const y = yFor(t);
+      return `<line x1="${padL}" y1="${y.toFixed(1)}" x2="${width - padR}" y2="${y.toFixed(1)}" stroke="var(--border-light,#e5e7eb)" stroke-width="1"/>`
+        + `<text x="${padL - 6}" y="${(y + 3).toFixed(1)}" text-anchor="end" font-size="10" fill="var(--text-muted,#8a8f98)">${t}</text>`;
+    })
+    .join("");
+
+  const xLabels = labels
+    .map((lb, i) => `<text x="${xFor(i).toFixed(1)}" y="${height - 8}" text-anchor="middle" font-size="10" fill="var(--text-muted,#8a8f98)">${escapeHtml(lb)}</text>`)
+    .join("");
+
+  const paths = series
+    .map((s) => {
+      const pts = s.values.map((v, i) => `${xFor(i).toFixed(1)},${yFor(v).toFixed(1)}`);
+      const line = `<polyline fill="none" stroke="${s.color}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" points="${pts.join(" ")}"/>`;
+      const dots = s.values.map((v, i) => `<circle cx="${xFor(i).toFixed(1)}" cy="${yFor(v).toFixed(1)}" r="3" fill="${s.color}"><title>${s.label}: ${v ?? 0}</title></circle>`).join("");
+      return line + dots;
+    })
+    .join("");
+
+  return `<svg viewBox="0 0 ${width} ${height}" width="100%" height="${height}" role="img">${grid}${paths}${xLabels}</svg>`;
+}
+
+// ── WEEKLY METRICS: rendering ─────────────────────────────────────────────
+
+function renderMetricsDashboard() {
+  renderMetricsInputs();
+  renderMetricCards();
+  renderMetricTrendChart();
+  renderMetricComparison();
+  renderActivityChart();
+}
+
+// Pre-fill the entry form with this week's saved values (if any).
+function renderMetricsInputs() {
+  const week = currentMaintenanceWeek();
+  const saved = metricsForWeek(week.key);
+  for (const metric of WEEKLY_METRICS) {
+    const input = document.getElementById(`metric_${metric.key}`);
+    if (input && document.activeElement !== input) {
+      input.value = saved && saved[metric.key] != null ? saved[metric.key] : "";
+    }
+  }
+  if (els.metricPatchNotes) els.metricPatchNotes.checked = Boolean(saved && saved.patch_notes_posted);
+}
+
+function orderedWeekKeys() {
+  return lastNWeekStarts(METRIC_WEEKS).map((d) => localDateKey(d));
+}
+
+function seriesForMetric(key) {
+  return orderedWeekKeys().map((wk) => {
+    const row = metricsForWeek(wk);
+    return row && row[key] != null ? Number(row[key]) : 0;
+  });
+}
+
+function renderMetricCards() {
+  if (!els.metricCards) return;
+  const weekKeys = orderedWeekKeys();
+  const labels = weekKeys.map(shortWeekLabel);
+  const currentKey = weekKeys[weekKeys.length - 1];
+  els.metricCards.innerHTML = WEEKLY_METRICS
+    .map((metric) => {
+      const values = seriesForMetric(metric.key);
+      const current = metricsForWeek(currentKey);
+      const value = current && current[metric.key] != null ? current[metric.key] : "—";
+      return `
+        <div class="metric-card">
+          <span class="metric-card-label">${escapeHtml(metric.label)}</span>
+          <span class="metric-card-value" style="color:${metric.color}">${escapeHtml(value)}</span>
+          ${sparkBars(values, metric.color)}
+          <span class="metric-card-foot">Last ${METRIC_WEEKS} weeks · ${escapeHtml(labels[0])}–${escapeHtml(labels[labels.length - 1])}</span>
+        </div>
+      `;
+    })
+    .join("");
+}
+
+function renderMetricTrendChart() {
+  if (!els.metricTrend) return;
+  const labels = orderedWeekKeys().map(shortWeekLabel);
+  const series = WEEKLY_METRICS.map((m) => ({ label: m.label, color: m.color, values: seriesForMetric(m.key) }));
+  const legend = WEEKLY_METRICS
+    .map((m) => `<span class="chart-legend-item"><span class="chart-legend-dot" style="background:${m.color}"></span>${escapeHtml(m.label)}</span>`)
+    .join("");
+  els.metricTrend.innerHTML = `<div class="chart-legend">${legend}</div>${lineChart(series, labels)}`;
+}
+
+function renderMetricComparison() {
+  if (!els.metricComparison) return;
+  const weekKeys = orderedWeekKeys();
+  const thisKey = weekKeys[weekKeys.length - 1];
+  const lastKey = weekKeys[weekKeys.length - 2];
+  const thisWeek = metricsForWeek(thisKey);
+  const lastWeek = metricsForWeek(lastKey);
+
+  els.metricComparison.innerHTML = WEEKLY_METRICS
+    .map((metric) => {
+      const cur = thisWeek && thisWeek[metric.key] != null ? Number(thisWeek[metric.key]) : null;
+      const prev = lastWeek && lastWeek[metric.key] != null ? Number(lastWeek[metric.key]) : null;
+      let deltaHtml = '<span class="cmp-delta muted">no prior week</span>';
+      if (cur != null && prev != null) {
+        const diff = cur - prev;
+        const pct = prev === 0 ? (cur === 0 ? 0 : 100) : Math.round((diff / prev) * 100);
+        // For thumbs_down a decrease is good; for others an increase is good.
+        const goodWhenUp = metric.key !== "thumbs_down";
+        const isGood = diff === 0 ? null : (diff > 0) === goodWhenUp;
+        const tone = diff === 0 ? "muted" : (isGood ? "good" : "bad");
+        const arrow = diff > 0 ? "▲" : (diff < 0 ? "▼" : "—");
+        deltaHtml = `<span class="cmp-delta ${tone}">${arrow} ${Math.abs(pct)}% vs last week</span>`;
+      }
+      return `
+        <div class="cmp-tile">
+          <span class="cmp-label">${escapeHtml(metric.label)}</span>
+          <span class="cmp-value" style="color:${metric.color}">${cur != null ? cur : "—"}</span>
+          ${deltaHtml}
+        </div>
+      `;
+    })
+    .join("");
+}
+
+function renderActivityChart() {
+  if (!els.activityChart) return;
+  const weekKeys = orderedWeekKeys();
+  const labels = weekKeys.map(shortWeekLabel);
+  const applied = weekKeys.map((wk) => (state.autoWeekActivity[wk] || {}).applied || 0);
+  const newFiles = weekKeys.map((wk) => (state.autoWeekActivity[wk] || {}).newFiles || 0);
+  const legend = `
+    <span class="chart-legend-item"><span class="chart-legend-dot" style="background:#4c7df0"></span>Corrections applied</span>
+    <span class="chart-legend-item"><span class="chart-legend-dot" style="background:#30a46c"></span>New KB files</span>`;
+  const series = [
+    { label: "Corrections applied", color: "#4c7df0", values: applied },
+    { label: "New KB files", color: "#30a46c", values: newFiles },
+  ];
+  els.activityChart.innerHTML = `<div class="chart-legend">${legend}</div>${lineChart(series, labels)}`;
 }
 
 async function confirmWeeklyMaintenance() {
@@ -1625,6 +1928,7 @@ els.confirmMaintenance.addEventListener("click", () => confirmWeeklyMaintenance(
 els.refreshMaintenance.addEventListener("click", () => loadMaintenance().catch((err) => showToast(err.message)));
 els.maintenanceCompletedBy.addEventListener("input", persistMaintenanceDraft);
 els.maintenanceNotes.addEventListener("input", persistMaintenanceDraft);
+if (els.saveMetricsBtn) els.saveMetricsBtn.addEventListener("click", () => saveWeeklyMetrics().catch((err) => showToast(err.message)));
 
 // ── LAST EDITED DATE ──────────────────────────────────────────────────────
 

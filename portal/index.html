@@ -6,7 +6,7 @@
     <title>Apollo KB Portal — Sandbox VR</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link href="https://fonts.googleapis.com/css2?family=Gordita:wght@400;500;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="./styles.css?v=20260717b" />
+    <link rel="stylesheet" href="./styles.css?v=20260717c" />
   </head>
   <body>
     <div class="app-shell">
@@ -524,6 +524,63 @@
 
         <!-- WEEKLY MAINTENANCE VIEW -->
         <section class="view" id="maintenanceView">
+
+          <!-- ── METRICS DASHBOARD ── -->
+          <section class="panel metrics-dashboard">
+            <div class="section-title">
+              <h2>Apollo Health — This Week</h2>
+              <span class="rule"></span>
+            </div>
+            <p class="metrics-intro">Enter this week's Chatbase numbers below, then review the trends. Cards show the last 8 weeks; the portal fills in corrections and new files automatically.</p>
+
+            <div class="metric-cards" id="metricCards"></div>
+
+            <div class="metrics-two-col">
+              <div class="metrics-block">
+                <div class="guide-section-label">This week vs last week</div>
+                <div class="cmp-grid" id="metricComparison"></div>
+              </div>
+              <div class="metrics-block">
+                <div class="guide-section-label">Portal activity (auto)</div>
+                <div class="chart-wrap" id="activityChart"></div>
+              </div>
+            </div>
+
+            <div class="metrics-block">
+              <div class="guide-section-label">Week-over-week trends</div>
+              <div class="chart-wrap" id="metricTrend"></div>
+            </div>
+
+            <div class="metrics-entry">
+              <div class="guide-section-label">Enter this week's metrics</div>
+              <div class="metrics-entry-grid">
+                <label class="field">
+                  <span>Apollo interactions</span>
+                  <input id="metric_apollo_interactions" type="number" min="0" inputmode="numeric" placeholder="0" />
+                </label>
+                <label class="field">
+                  <span>Reliability tags</span>
+                  <input id="metric_reliability_tags" type="number" min="0" inputmode="numeric" placeholder="0" />
+                </label>
+                <label class="field">
+                  <span>Thumbs up</span>
+                  <input id="metric_thumbs_up" type="number" min="0" inputmode="numeric" placeholder="0" />
+                </label>
+                <label class="field">
+                  <span>Thumbs down</span>
+                  <input id="metric_thumbs_down" type="number" min="0" inputmode="numeric" placeholder="0" />
+                </label>
+              </div>
+              <label class="sync-checkbox-label" style="margin-top:10px">
+                <input id="metricPatchNotes" type="checkbox" />
+                <span>Patch notes generated &amp; posted this week</span>
+              </label>
+              <div class="button-row" style="margin-top:12px">
+                <button class="button primary" id="saveMetricsBtn" type="button">Save this week's metrics</button>
+              </div>
+            </div>
+          </section>
+
           <div class="maintenance-grid">
 
             <section class="panel maintenance-check-panel">
@@ -581,14 +638,16 @@
               </div>
 
               <div class="guide-section">
-                <div class="guide-section-label">Weekly Routine</div>
-                <ul class="guide-tips">
-                  <li>Review active corrections and clear anything ready for review.</li>
-                  <li>Investigate failed or stuck automation items before they pile up.</li>
-                  <li>Confirm applied KB updates were backed up to Google Drive.</li>
-                  <li>Confirm applied KB updates were replaced and retrained in Chatbase.</li>
-                  <li>Generate patch notes when changes were applied during the week.</li>
-                </ul>
+                <div class="guide-section-label">Do these every week, in order</div>
+                <ol class="guide-steps">
+                  <li><strong>Enter the metrics</strong> — Pull this week's numbers from Chatbase (interactions, reliability tags, thumbs up/down) and enter them in the dashboard above. Save.</li>
+                  <li><strong>Clear the Review Queue</strong> — Approve or reject everything marked <em>analysis ready</em> or <em>needs review</em>.</li>
+                  <li><strong>Investigate failures</strong> — Check the snapshot below for failed or stuck items and resolve them.</li>
+                  <li><strong>Back up to Google Drive</strong> — Download each applied file and upload it to the Drive backup folder, then tick its Drive checkbox in the Activity Log.</li>
+                  <li><strong>Retrain Chatbase</strong> — Replace updated files in Chatbase, retrain Apollo, and tick each Chatbase checkbox in the Activity Log.</li>
+                  <li><strong>Post patch notes</strong> — If anything was applied this week, download patch notes and post them, then check the box in the dashboard.</li>
+                  <li><strong>Confirm the week</strong> — Tick all routines in the checklist and hit <em>Confirm Weekly Maintenance</em>.</li>
+                </ol>
               </div>
 
               <div class="guide-section">
@@ -629,6 +688,6 @@
     <script src="https://cdn.jsdelivr.net/npm/mammoth@1/mammoth.browser.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jszip@3/dist/jszip.min.js"></script>
     <script src="./config.js"></script>
-    <script src="./app.js?v=20260717b"></script>
+    <script src="./app.js?v=20260717c"></script>
   </body>
 </html>
