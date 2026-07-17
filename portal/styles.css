@@ -1007,6 +1007,24 @@ input:focus, select:focus, textarea:focus {
 
 .activity-sync-row.saving { opacity: 0.5; pointer-events: none; }
 
+/* Multi-file correction grouping in the Activity Log */
+.activity-file-group {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.activity-file-group .activity-file {
+  padding: 12px 14px;
+  border: 1px solid var(--border-light);
+  border-left: 3px solid var(--accent, #2563eb);
+  border-radius: 8px;
+  background: var(--surface-subtle, rgba(0,0,0,0.02));
+}
+
+.activity-file > strong { font-size: 13px; font-weight: 700; }
+
 .sync-checkbox-label {
   display: flex;
   align-items: center;

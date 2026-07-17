@@ -426,74 +426,104 @@ function cssEscape(value) {
   return String(value).replace(/["\\]/g, "\\$&");
 }
 
+// Render one file's block: name, sync chips, download/copy buttons, and the
+// per-file sync checkboxes. Shared by single-file and grouped multi-file cards.
+function activityFileBlock(item, targetFile) {
+  const isApplied = item.status === "applied";
+  const fileSync = (item.file_sync && item.file_sync[targetFile]) || null;
+  const cbSynced = fileSync ? fileSync.chatbase_synced === true : item.chatbase_synced === true;
+  const cbSyncedAtRaw = fileSync ? fileSync.chatbase_synced_at : item.chatbase_synced_at;
+  const cbSyncedAt = cbSyncedAtRaw
+    ? new Date(cbSyncedAtRaw).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+    : null;
+  const gdSynced = fileSync ? fileSync.gdrive_synced === true : item.gdrive_synced === true;
+  const gdSyncedAtRaw = fileSync ? fileSync.gdrive_synced_at : item.gdrive_synced_at;
+  const gdSyncedAt = gdSyncedAtRaw
+    ? new Date(gdSyncedAtRaw).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+    : null;
+  const rowKey = `${item.id}::${targetFile || ""}`;
+
+  return `
+    <div class="activity-file">
+      <strong>${escapeHtml(targetFile || shortText(item.question, "No target file"))}</strong>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:6px;flex-wrap:wrap">
+        <span class="status-chip ${gdSynced ? "applied" : ""} gdrive-sync-chip" data-key="${escapeHtml(rowKey)}">${gdSynced ? `✓ Synced to Drive${gdSyncedAt ? ` · ${gdSyncedAt}` : ""}` : "Not synced to Drive"}</span>
+        <span class="status-chip ${cbSynced ? "applied" : ""} chatbase-sync-chip" data-key="${escapeHtml(rowKey)}">${cbSynced ? `✓ Synced to Chatbase${cbSyncedAt ? ` · ${cbSyncedAt}` : ""}` : "Not synced to Chatbase"}</span>
+      </div>
+      ${isApplied && targetFile ? `
+        <div class="activity-sync-row" data-key="${escapeHtml(rowKey)}">
+          <div class="button-row" style="margin-bottom:10px">
+            <button class="button secondary compact activity-dl-btn" data-file="${escapeHtml(targetFile)}" type="button">Download .txt</button>
+            <button class="button quiet compact activity-copy-btn" data-file="${escapeHtml(targetFile)}" type="button">Copy for Chatbase</button>
+          </div>
+          <label class="sync-checkbox-label">
+            <input type="checkbox" class="gdrive-sync-cb" data-key="${escapeHtml(rowKey)}" data-id="${escapeHtml(item.id)}" data-file="${escapeHtml(targetFile)}" ${gdSynced ? "checked" : ""} />
+            <span>Synced to Google Drive backup</span>
+          </label>
+          <label class="sync-checkbox-label" style="margin-top:6px">
+            <input type="checkbox" class="chatbase-sync-cb" data-key="${escapeHtml(rowKey)}" data-id="${escapeHtml(item.id)}" data-file="${escapeHtml(targetFile)}" ${cbSynced ? "checked" : ""} />
+            <span>Synced to Chatbase</span>
+          </label>
+        </div>
+      ` : ""}
+    </div>
+  `;
+}
+
 function renderActivity(items) {
   if (!items.length) {
     els.activityList.innerHTML = '<div class="recent-item muted">No activity yet.</div>';
     return;
   }
 
-  // Expand multi-file corrections to show each applied target file
-  const expandedItems = [];
-  for (const item of items) {
-    const isMultiFile = Array.isArray(item.targets) && item.targets.length > 1;
-    if (isMultiFile && item.status === "applied") {
-      // Show each approved target as a separate row
-      const approvedTargets = item.targets.filter(t => t.status === "approved");
-      for (const target of approvedTargets) {
-        expandedItems.push({ ...item, target_file: target.file, _isExpandedMultiFile: true });
-      }
-    } else {
-      // Single file or not yet applied
-      expandedItems.push(item);
-    }
-  }
-
-  els.activityList.innerHTML = expandedItems
+  els.activityList.innerHTML = items
     .map((item) => {
-      const isApplied = item.status === "applied";
-      // Per-file sync state, falling back to the legacy correction-level flags
-      // for rows saved before file_sync existed.
-      const fileSync = (item.file_sync && item.file_sync[item.target_file]) || null;
-      const cbSynced = fileSync ? fileSync.chatbase_synced === true : item.chatbase_synced === true;
-      const cbSyncedAtRaw = fileSync ? fileSync.chatbase_synced_at : item.chatbase_synced_at;
-      const cbSyncedAt = cbSyncedAtRaw
-        ? new Date(cbSyncedAtRaw).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
-        : null;
-      const gdSynced = fileSync ? fileSync.gdrive_synced === true : item.gdrive_synced === true;
-      const gdSyncedAtRaw = fileSync ? fileSync.gdrive_synced_at : item.gdrive_synced_at;
-      const gdSyncedAt = gdSyncedAtRaw
-        ? new Date(gdSyncedAtRaw).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
-        : null;
-      const rowKey = `${item.id}::${item.target_file || ""}`;
+      const time = escapeHtml(new Date(item.updated_at).toLocaleString());
+      const statusChip = `<span class="status-chip ${escapeHtml(item.status)}">${escapeHtml(statusLabel(item.status))}</span>`;
+      const commitLink = item.github_commit_url
+        ? `<a href="${escapeHtml(item.github_commit_url)}" target="_blank" rel="noreferrer" class="commit-link" style="font-size:12px">View Commit →</a>`
+        : "";
+      const failureNote = item.failure_reason && item.status !== "rejected"
+        ? `<span style="font-size:12px;color:var(--danger);margin-top:4px;display:block">${escapeHtml(item.failure_reason)}</span>`
+        : (item.status === "rejected" && item.failure_reason
+          ? `<span style="font-size:12px;color:var(--text-muted);margin-top:4px;display:block">Rejection reason: ${escapeHtml(item.failure_reason)}</span>`
+          : "");
 
+      const approvedTargets = (Array.isArray(item.targets) ? item.targets : []).filter(t => t.status === "approved");
+      const isGroupedMultiFile = item.status === "applied" && approvedTargets.length > 1;
+
+      if (isGroupedMultiFile) {
+        // One correction that updated several files — show a group header naming
+        // the correction, then each file nested beneath it.
+        return `
+          <div class="recent-item recent-group">
+            <span class="recent-time">${time}</span>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:2px;flex-wrap:wrap">
+              ${statusChip}
+              <span class="status-chip">${approvedTargets.length} files updated by this correction</span>
+              ${commitLink}
+            </div>
+            <div style="font-size:13px;color:var(--text-muted);margin-top:8px">
+              From correction: <em>${escapeHtml(shortText(item.question || item.target_file, "correction"))}</em>
+            </div>
+            <div class="activity-file-group">
+              ${approvedTargets.map(t => activityFileBlock(item, t.file)).join("")}
+            </div>
+            ${failureNote}
+          </div>
+        `;
+      }
+
+      // Single-file correction (or not yet applied) — one card.
       return `
         <div class="recent-item">
-          <span class="recent-time">${escapeHtml(new Date(item.updated_at).toLocaleString())}</span>
-          <strong>${escapeHtml(item.target_file || shortText(item.question, "No target file"))}</strong>
-          <div style="display:flex;align-items:center;gap:8px;margin-top:6px;flex-wrap:wrap">
-            <span class="status-chip ${escapeHtml(item.status)}">${escapeHtml(statusLabel(item.status))}</span>
-            <span class="status-chip ${gdSynced ? "applied" : ""} gdrive-sync-chip" data-key="${escapeHtml(rowKey)}">${gdSynced ? `✓ Synced to Drive${gdSyncedAt ? ` · ${gdSyncedAt}` : ""}` : "Not synced to Drive"}</span>
-            <span class="status-chip ${cbSynced ? "applied" : ""} chatbase-sync-chip" data-key="${escapeHtml(rowKey)}">${cbSynced ? `✓ Synced to Chatbase${cbSyncedAt ? ` · ${cbSyncedAt}` : ""}` : "Not synced to Chatbase"}</span>
-            ${item.github_commit_url ? `<a href="${escapeHtml(item.github_commit_url)}" target="_blank" rel="noreferrer" class="commit-link" style="font-size:12px">View Commit →</a>` : ""}
+          <span class="recent-time">${time}</span>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px;flex-wrap:wrap">
+            ${statusChip}
+            ${commitLink}
           </div>
-          ${isApplied && item.target_file ? `
-            <div class="activity-sync-row" data-key="${escapeHtml(rowKey)}">
-              <div class="button-row" style="margin-bottom:10px">
-                <button class="button secondary compact activity-dl-btn" data-file="${escapeHtml(item.target_file)}" type="button">Download .txt</button>
-                <button class="button quiet compact activity-copy-btn" data-file="${escapeHtml(item.target_file)}" type="button">Copy for Chatbase</button>
-              </div>
-              <label class="sync-checkbox-label">
-                <input type="checkbox" class="gdrive-sync-cb" data-key="${escapeHtml(rowKey)}" data-id="${escapeHtml(item.id)}" data-file="${escapeHtml(item.target_file)}" ${gdSynced ? "checked" : ""} />
-                <span>Synced to Google Drive backup</span>
-              </label>
-              <label class="sync-checkbox-label" style="margin-top:6px">
-                <input type="checkbox" class="chatbase-sync-cb" data-key="${escapeHtml(rowKey)}" data-id="${escapeHtml(item.id)}" data-file="${escapeHtml(item.target_file)}" ${cbSynced ? "checked" : ""} />
-                <span>Synced to Chatbase</span>
-              </label>
-            </div>
-          ` : ""}
-          ${item.failure_reason && item.status !== "rejected" ? `<span style="font-size:12px;color:var(--danger);margin-top:4px;display:block">${escapeHtml(item.failure_reason)}</span>` : ""}
-          ${item.status === "rejected" && item.failure_reason ? `<span style="font-size:12px;color:var(--text-muted);margin-top:4px;display:block">Rejection reason: ${escapeHtml(item.failure_reason)}</span>` : ""}
+          ${activityFileBlock(item, item.target_file)}
+          ${failureNote}
         </div>
       `;
     })
